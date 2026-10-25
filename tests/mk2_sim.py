@@ -2,7 +2,9 @@
 
 Used by the tests; not shipped. Behaviour follows the Dantherm Residential
 register map: writes to the active-mode register change the current mode,
-manual bypass toggles the damper, the fan level sets the step, filter and
+the active-mode register reads back as a bitmask (bit 0x0080 = manual bypass
+selected), selecting manual bypass moves the damper (optionally over several
+reads, like the real damper's travel), the fan level sets the step, filter and
 alarm resets clear their counters.
 """
 
@@ -16,11 +18,16 @@ import mk2
 
 
 class Mk2Simulator:
-    def __init__(self) -> None:
+    def __init__(self, bypass_travel_reads: int = 0) -> None:
         self.regs: dict[int, int] = {}
         self.lock = threading.Lock()
         self.writes: list[tuple[int, list[int]]] = []
         self._previous_mode = mk2.MODE_AUTOMATIC
+        # Damper reads spent OPENING/CLOSING before it arrives (0 = it moves at once).
+        self.bypass_travel_reads = bypass_travel_reads
+        self.failing_registers: set[int] = set()  # reads answer with a Modbus exception
+        self._travel_left: int | None = None  # None: no simulated travel under way
+        self._damper_next: int | None = None  # where the damper goes after the current travel
         self.set_u32(mk2.REG_SYSTEM_ID, mk2.DEVICE_TYPE_HCH5_MK2 << 24 | 0x0105)
         self.set_u32(mk2.REG_SERIAL_NUMBER, 123456)
         self.set_u32(mk2.REG_SERIAL_NUMBER + 2, 0)
@@ -33,6 +40,7 @@ class Mk2Simulator:
         ):
             self.set_f32(reg, value)
         self.set_u32(mk2.REG_CURRENT_MODE, mk2.MODE_AUTOMATIC)
+        self.set_u32(mk2.REG_ACTIVE_MODE, mk2.CMD_AUTOMATIC)
         self.set_u32(mk2.REG_FAN_LEVEL, 2)
         self.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_CLOSED)
         self.set_u32(mk2.REG_HUMIDITY, 46)
@@ -59,18 +67,21 @@ class Mk2Simulator:
 
     def read(self, address: int, count: int) -> list[int] | None:
         with self.lock:
-            if address not in self.regs:
+            if address not in self.regs or address in self.failing_registers:
                 return None  # illegal address
+            if address == mk2.REG_BYPASS_DAMPER:
+                self._advance_damper()
             return [self.regs.get(address + i, 0) for i in range(count)]
 
     def write(self, address: int, values: list[int]) -> None:
         with self.lock:
             self.writes.append((address, list(values)))
+            if address == mk2.REG_ACTIVE_MODE and len(values) == 2:
+                self._command(mk2.regs_to_u32(values))  # reads back as the active-mode bits
+                return
             for i, value in enumerate(values):
                 self.regs[address + i] = value
-            if address == mk2.REG_ACTIVE_MODE and len(values) == 2:
-                self._command(mk2.regs_to_u32(values))
-            elif address == mk2.REG_FAN_LEVEL:
+            if address == mk2.REG_FAN_LEVEL:
                 level = self.u32(mk2.REG_FAN_LEVEL)
                 self.set_u32(mk2.REG_CURRENT_MODE, mk2.MODE_STANDBY if level == 0 else mk2.MODE_MANUAL)
             elif address == mk2.REG_FILTER_RESET:
@@ -80,6 +91,14 @@ class Mk2Simulator:
 
     def _command(self, cmd: int) -> None:
         current = self.u32(mk2.REG_CURRENT_MODE)
+        active = self.u32(mk2.REG_ACTIVE_MODE)
+        if cmd & 0x8000:
+            active &= ~(cmd & 0x7FFF)
+        elif cmd in (mk2.CMD_AUTOMATIC, mk2.CMD_MANUAL, mk2.CMD_WEEK_PROGRAM):
+            active = active & ~0x000E | cmd
+        else:
+            active |= cmd
+        self.set_u32(mk2.REG_ACTIVE_MODE, active)
         starts = {
             mk2.CMD_MANUAL: mk2.MODE_MANUAL, mk2.CMD_AUTOMATIC: mk2.MODE_AUTOMATIC,
             mk2.CMD_WEEK_PROGRAM: mk2.MODE_WEEK_PROGRAM, mk2.CMD_START_AWAY: mk2.MODE_AWAY,
@@ -94,9 +113,42 @@ class Mk2Simulator:
         elif cmd in ends:
             self.set_u32(mk2.REG_CURRENT_MODE, self._previous_mode)
         elif cmd == mk2.CMD_BYPASS_OPEN:
-            self.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_OPENED)
+            self._move_damper(mk2.BYPASS_OPENED)
         elif cmd == mk2.CMD_BYPASS_CLOSE:
-            self.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_CLOSED)
+            self._move_damper(mk2.BYPASS_CLOSED)
+
+    # bypass damper travel
+    def _move_damper(self, target: int) -> None:
+        state = self.u32(mk2.REG_BYPASS_DAMPER)
+        if self.bypass_travel_reads <= 0:
+            self._travel_left, self._damper_next = None, None
+            self.set_u32(mk2.REG_BYPASS_DAMPER, target)
+        elif self._travel_left is not None:
+            heading = mk2.BYPASS_OPENED if state == mk2.BYPASS_OPENING else mk2.BYPASS_CLOSED
+            # Like the real unit, a damper on its way finishes that travel first.
+            self._damper_next = None if target == heading else target
+        elif state != target:
+            self._start_travel(target)
+
+    def _start_travel(self, target: int) -> None:
+        moving = mk2.BYPASS_OPENING if target == mk2.BYPASS_OPENED else mk2.BYPASS_CLOSING
+        self.set_u32(mk2.REG_BYPASS_DAMPER, moving)
+        self._travel_left = self.bypass_travel_reads
+
+    def _advance_damper(self) -> None:
+        """One damper read: count down the travel, then arrive (and start any queued travel)."""
+        if self._travel_left is None:
+            return
+        if self._travel_left > 0:
+            self._travel_left -= 1
+            return
+        state = self.u32(mk2.REG_BYPASS_DAMPER)
+        self.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_OPENED if state == mk2.BYPASS_OPENING else mk2.BYPASS_CLOSED)
+        self._travel_left = None
+        if self._damper_next is not None:
+            target, self._damper_next = self._damper_next, None
+            if target != self.u32(mk2.REG_BYPASS_DAMPER):
+                self._start_travel(target)
 
     # Modbus PDU handling
     def handle_pdu(self, pdu: bytes) -> bytes:

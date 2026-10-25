@@ -32,7 +32,7 @@ REG_EXTRACT_TEMP = 136  # T3
 REG_EXHAUST_TEMP = 138  # T4
 REG_ROOM_TEMP = 140  # T5 (room sensor / HRC)
 REG_PREHEATER_DUTYCYCLE = 160
-REG_ACTIVE_MODE = 168  # write: mode commands below
+REG_ACTIVE_MODE = 168  # write: mode commands below; read: ACTIVE_* bits
 REG_HUMIDITY = 196  # % RH
 REG_BYPASS_DAMPER = 198  # BYPASS_* states
 REG_MANUAL_BYPASS_DURATION = 264
@@ -94,12 +94,22 @@ CMD_BYPASS_CLOSE = 0x8080
 CMD_START_SUMMER = 0x0800
 CMD_END_SUMMER = 0x8800
 
+# Bits read back from REG_ACTIVE_MODE.
+ACTIVE_MANUAL_BYPASS = 0x0080  # manual bypass selected (set at once; the damper follows)
+
 # Bypass damper state (REG_BYPASS_DAMPER) – 255 means open, as on the MK1.
 BYPASS_CLOSED = 0
 BYPASS_IN_PROGRESS = 1
 BYPASS_CLOSING = 32
 BYPASS_OPENING = 64
 BYPASS_OPENED = 255
+BYPASS_STATES = {
+    BYPASS_CLOSED: "closed",
+    BYPASS_IN_PROGRESS: "in_progress",
+    BYPASS_CLOSING: "closing",
+    BYPASS_OPENING: "opening",
+    BYPASS_OPENED: "open",
+}
 
 # Component bits (REG_SYSTEM_COMPONENTS).
 COMPONENT_BYPASS = 0x0004
@@ -368,6 +378,7 @@ class Mk2Unit:
             "summer": mode == MODE_SUMMER,
             "bypass_raw": bypass,
             "bypass_active": bypass in (BYPASS_OPENED, BYPASS_OPENING),
+            "bypass_state": BYPASS_STATES.get(bypass, f"raw_{bypass}"),
             "status_code": alarm,
             "alarm": ALARMS.get(alarm, f"alarm_{alarm}"),
             "filter_alarm": remain == 0,
@@ -382,6 +393,12 @@ class Mk2Unit:
             data["room_temperature"] = self._f32(REG_ROOM_TEMP)
         except ModbusError:
             pass
+        if info.has_bypass or info.components == 0:
+            # Whether manual bypass is selected changes at once; the damper takes minutes to follow.
+            try:
+                data["manual_bypass"] = bool(self._u32(REG_ACTIVE_MODE) & ACTIVE_MANUAL_BYPASS)
+            except ModbusError:
+                pass
         if info.has_humidity or info.components == 0:
             data["relative_humidity"] = self._u32(REG_HUMIDITY)
         if info.has_air_quality or info.components == 0:
@@ -431,10 +448,18 @@ class Mk2Unit:
         self.command(CMD_NIGHT_ON if on else CMD_NIGHT_OFF)
 
     def set_bypass(self, open_: bool) -> None:
-        """Manual bypass toggles on the unit, so only send when the state differs."""
-        state = self._u32(REG_BYPASS_DAMPER)
-        is_open = state in (BYPASS_OPENED, BYPASS_OPENING, BYPASS_IN_PROGRESS)
-        if open_ != is_open:
+        """Select or deselect manual bypass; only send when the unit's choice differs.
+
+        Decided by the manual-bypass bit of the active mode (as Tvalley71/dantherm
+        does), not by the damper, which needs a minute or two to travel. Units that
+        do not answer that register fall back to the damper position.
+        """
+        try:
+            selected = bool(self._u32(REG_ACTIVE_MODE) & ACTIVE_MANUAL_BYPASS)
+        except ModbusError:
+            state = self._u32(REG_BYPASS_DAMPER)
+            selected = state in (BYPASS_OPENED, BYPASS_OPENING, BYPASS_IN_PROGRESS)
+        if open_ != selected:
             self.command(CMD_BYPASS_OPEN if open_ else CMD_BYPASS_CLOSE)
 
     def reset_filter(self) -> None:

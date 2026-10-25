@@ -89,7 +89,11 @@ class Mk2LevelSelect(_Mk2Entity, SelectEntity):
 
 
 class Mk2BypassSwitch(_Mk2Entity, SwitchEntity):
-    """Manual bypass: open the damper now (the unit closes it again after its own timeout)."""
+    """Manual bypass: open the damper now (the unit closes it again after its own timeout).
+
+    On/off follows whether manual bypass is selected on the unit, which changes at
+    once; the damper needs a minute or two to travel and is shown as an attribute.
+    """
 
     _attr_translation_key = "mk2_bypass"
     _attr_icon = "mdi:valve"
@@ -103,7 +107,14 @@ class Mk2BypassSwitch(_Mk2Entity, SwitchEntity):
 
     @property
     def is_on(self) -> bool | None:
-        return self.coordinator.data.get("bypass_active")
+        data = self.coordinator.data
+        if "manual_bypass" in data:
+            return data["manual_bypass"]
+        return data.get("bypass_active")  # units that do not report the active mode
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        return {"damper": self.coordinator.data.get("bypass_state")}
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._command("set_bypass", True)

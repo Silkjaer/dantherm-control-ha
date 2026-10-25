@@ -88,10 +88,25 @@ async def test_mk2_setup_entities_and_controls(hass, sim):
     await _until(hass, lambda: hass.states.get(level).state == "4")
     assert hass.states.get(operation).state == "manual"
 
+    # The switch follows the manual-bypass selection at once; the damper takes minutes to travel.
+    sim.bypass_travel_reads = 1000
     bypass = _entity(hass, "switch", "mk2_bypass")
     await hass.services.async_call("switch", "turn_on", {"entity_id": bypass}, blocking=True)
     await _until(hass, lambda: hass.states.get(bypass).state == "on")
-    assert sim.u32(mk2.REG_BYPASS_DAMPER) == mk2.BYPASS_OPENED
+    assert hass.states.get(bypass).attributes["damper"] == "opening"
+    assert sim.u32(mk2.REG_BYPASS_DAMPER) == mk2.BYPASS_OPENING
+    await hass.services.async_call("switch", "turn_off", {"entity_id": bypass}, blocking=True)
+    await _until(hass, lambda: hass.states.get(bypass).state == "off")
+    assert hass.states.get(bypass).attributes["damper"] == "opening"  # still finishing its travel
+    commands = [mk2.regs_to_u32(v) for a, v in sim.writes if a == mk2.REG_ACTIVE_MODE]
+    assert commands[-2:] == [mk2.CMD_BYPASS_OPEN, mk2.CMD_BYPASS_CLOSE]
+    # Units that do not report the active mode: the switch shows the damper instead.
+    sim.failing_registers.add(mk2.REG_ACTIVE_MODE)
+    writes = len(sim.writes)
+    await hass.services.async_call("switch", "turn_on", {"entity_id": bypass}, blocking=True)
+    await _until(hass, lambda: hass.states.get(bypass).state == "on")
+    assert len(sim.writes) == writes  # the damper is already opening: nothing to send
+    sim.failing_registers.clear()
 
     sim.set_u32(mk2.REG_FILTER_REMAIN, 0)
     sim.set_u32(mk2.REG_ALARM, 2)

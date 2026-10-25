@@ -224,6 +224,7 @@ An HCH5 MKII speaks Modbus itself (the Dantherm Residential register map). Choos
 
 - Readings: temperatures T1–T5, fan speeds, step, operation mode, bypass, humidity, air quality, filter days and alarm.
 - Connected directly (no Pi controller): **Operation mode** (standby, manual, automatic, week program, away, summer, fireplace), **Fan step** 0–4, **Bypass (manual)**, **Reset filter** and **Reset alarm**.
+- **Bypass (manual)** shows whether manual bypass is selected on the unit, so it switches at once; the damper needs a minute or two to travel, and its position (`closed`, `opening`, `open`, `closing`) is in the switch's `damper` attribute. *Bypass active* still shows the damper itself (0.9.0-beta.2).
 - With the HCH5 Control Pi: the controls come from the Pi as on an MK1.
 - MK1-only values (afterheat, HAC1, CO₂) are not created on an MKII.
 

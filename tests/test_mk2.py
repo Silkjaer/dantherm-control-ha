@@ -83,6 +83,91 @@ def test_bypass_is_only_toggled_when_needed(sim_tcp):
     assert unit.snapshot()["bypass_active"] is False
 
 
+def _bypass_commands(sim):
+    return [mk2.regs_to_u32(v) for a, v in sim.writes if a == mk2.REG_ACTIVE_MODE]
+
+
+@pytest.fixture
+def sim_travel(sim_tcp):
+    sim, unit = sim_tcp
+    sim.bypass_travel_reads = 3  # the damper reports OPENING/CLOSING for three reads
+    return sim, unit
+
+
+def test_bypass_on_shows_selected_while_the_damper_opens(sim_travel):
+    sim, unit = sim_travel
+    assert unit.snapshot()["manual_bypass"] is False
+    unit.set_bypass(True)
+    data = unit.snapshot()
+    assert data["manual_bypass"] is True and data["bypass_state"] == "opening"
+    assert data["bypass_raw"] == mk2.BYPASS_OPENING and data["bypass_active"] is True
+    for _ in range(3):
+        data = unit.snapshot()
+    assert data["bypass_state"] == "open" and data["manual_bypass"] is True
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN]
+
+
+def test_bypass_off_while_opening_deselects_at_once(sim_travel):
+    sim, unit = sim_travel
+    unit.set_bypass(True)
+    assert unit.snapshot()["bypass_state"] == "opening"
+    unit.set_bypass(False)
+    data = unit.snapshot()
+    assert data["manual_bypass"] is False  # off at once, although the damper is still travelling
+    assert data["bypass_state"] == "opening" and data["bypass_active"] is True
+    unit.set_bypass(False)  # already deselected: nothing more is sent
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN, mk2.CMD_BYPASS_CLOSE]
+    states = [unit.snapshot()["bypass_state"] for _ in range(10)]
+    assert "closing" in states and states[-1] == "closed"
+    data = unit.snapshot()
+    assert data["bypass_active"] is False and data["manual_bypass"] is False
+    assert _bypass_commands(sim).count(mk2.CMD_BYPASS_CLOSE) == 1
+
+
+def test_bypass_follows_the_selection_not_the_damper(sim_tcp):
+    sim, unit = sim_tcp
+    # Selected, but the damper is still closed: nothing to send for "on".
+    sim.set_u32(mk2.REG_ACTIVE_MODE, mk2.CMD_AUTOMATIC | mk2.ACTIVE_MANUAL_BYPASS)
+    unit.set_bypass(True)
+    assert sim.writes == []
+    unit.set_bypass(False)
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_CLOSE]
+    # The unit's own (automatic) bypass is open, manual bypass not selected.
+    sim.writes.clear()
+    sim.set_u32(mk2.REG_ACTIVE_MODE, mk2.CMD_AUTOMATIC)
+    sim.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_OPENED)
+    unit.set_bypass(False)
+    assert sim.writes == []
+    unit.set_bypass(True)
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN]
+
+
+def test_bypass_falls_back_to_the_damper_without_active_mode(sim_tcp):
+    sim, unit = sim_tcp
+    sim.failing_registers.add(mk2.REG_ACTIVE_MODE)
+    data = unit.snapshot()
+    assert "manual_bypass" not in data and data["bypass_state"] == "closed"
+    unit.set_bypass(True)
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN]
+    assert unit.snapshot()["bypass_active"] is True
+    unit.set_bypass(True)  # damper already open: no second toggle
+    unit.set_bypass(False)
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN, mk2.CMD_BYPASS_CLOSE]
+    assert unit.snapshot()["bypass_active"] is False
+
+
+def test_bypass_raw_and_active_keep_their_meaning(sim_tcp):
+    sim, unit = sim_tcp
+    for raw, state, active in (
+        (mk2.BYPASS_CLOSED, "closed", False), (mk2.BYPASS_IN_PROGRESS, "in_progress", False),
+        (mk2.BYPASS_CLOSING, "closing", False), (mk2.BYPASS_OPENING, "opening", True),
+        (mk2.BYPASS_OPENED, "open", True), (7, "raw_7", False),
+    ):
+        sim.set_u32(mk2.REG_BYPASS_DAMPER, raw)
+        data = unit.snapshot()
+        assert (data["bypass_raw"], data["bypass_state"], data["bypass_active"]) == (raw, state, active)
+
+
 def test_filter_and_alarm_reset(sim_tcp):
     sim, unit = sim_tcp
     sim.set_u32(mk2.REG_FILTER_REMAIN, 0)
