@@ -94,6 +94,19 @@ def main_device_name(mk2_info=None) -> str:
     return model if model.startswith("Dantherm") else f"Dantherm {model}"
 
 
+CONTROLLER_DEVICE_NAME = "Dantherm Control controller"
+
+
+def kept_device_name(existing_name: str | None, new_name: str) -> str:
+    """Keep the registry name of a device that already exists, else use the new name.
+
+    HA derives a new entity's entity_id from its device name, so renaming an
+    existing device would give entities added later (deferred ones, or new in a
+    release) a different prefix than the entities already there.
+    """
+    return existing_name or new_name
+
+
 def main_device_model(mk2_info=None) -> str:
     return mk2_info.model if mk2_info is not None else MK1_DEVICE_MODEL
 

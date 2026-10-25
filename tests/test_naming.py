@@ -33,3 +33,10 @@ def test_only_untouched_default_titles_are_renamed():
     assert const.renamed_entry_title("Ventilation") is None
     assert const.renamed_entry_title("Dantherm HCH5 Control (attic)", "RCV320 P2") is None
     assert const.renamed_entry_title("Dantherm HCH5 Control (attic)") is None
+
+
+def test_existing_devices_keep_their_registry_name():
+    assert const.kept_device_name("Dantherm HCH5 Control", "Dantherm RCV320 P2") == "Dantherm HCH5 Control"
+    assert const.kept_device_name("Dantherm HCH5 controller", const.CONTROLLER_DEVICE_NAME) == "Dantherm HCH5 controller"
+    assert const.kept_device_name(None, "Dantherm RCV320 P2") == "Dantherm RCV320 P2"
+    assert const.kept_device_name(None, const.CONTROLLER_DEVICE_NAME) == "Dantherm Control controller"

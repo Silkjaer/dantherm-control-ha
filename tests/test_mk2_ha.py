@@ -148,3 +148,27 @@ async def test_modbus_unit_is_named_after_its_model(hass, sim):
     }
     assert "Filtertimer" in models and "Indeklimasensor" in models
     assert not any("HCH5" in model or "HAC1" in model for model in models)
+
+
+async def test_existing_device_keeps_its_name(hass, sim):
+    """An install from before the rename keeps its device name, so new entities share the old entity_id prefix."""
+    sim.set_u32(mk2.REG_SYSTEM_ID, 21 << 24 | 0x0105)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Dantherm HCH5 Control (Dantherm type 21)",
+        data={"connection_type": "mk2_tcp", "host": "127.0.0.1", "port": sim.port, "unit_id": 1},
+    )
+    entry.add_to_hass(hass)
+    devices = dr.async_get(hass)
+    devices.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "hch5_mk1_hac1")},
+        name="Dantherm HCH5 Control",
+        manufacturer="Dantherm",
+        model="Dantherm type 21",
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await _until(hass, lambda: hass.states.get(_entity(hass, "sensor", "filter_days_remaining")) is not None)
+    main = devices.async_get_device(identifiers={(DOMAIN, "hch5_mk1_hac1")})
+    assert main.name == "Dantherm HCH5 Control" and main.model == "RCV320 P2"
+    assert _entity(hass, "sensor", "outdoor_temperature").startswith("sensor.dantherm_hch5_control_")

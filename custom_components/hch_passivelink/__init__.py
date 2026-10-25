@@ -56,6 +56,8 @@ from .const import (
     DOMAIN,
     main_device_model,
     main_device_name,
+    kept_device_name,
+    CONTROLLER_DEVICE_NAME,
     renamed_entry_title,
 )
 from .auxiliary import AuxiliaryTemperatureClient
@@ -218,10 +220,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: PassiveLinkConfigEntry) 
     client.set_update_callback(coordinator.async_handle_update)
     # Register the main device first so sub-devices can link to its id.
     coordinator.mk2_info = mk2_info
-    coordinator.main_device_id = dr.async_get(hass).async_get_or_create(
+    device_registry = dr.async_get(hass)
+    # Devices that already exist keep their names (entity_id prefixes stay
+    # consistent); only new installations get the new names.
+    existing_main = device_registry.async_get_device(identifiers={(DOMAIN, "hch5_mk1_hac1")})
+    existing_controller = device_registry.async_get_device(identifiers={(DOMAIN, "hch5_pi_controller")})
+    coordinator.main_device_name = kept_device_name(
+        existing_main.name if existing_main else None, main_device_name(mk2_info)
+    )
+    coordinator.controller_device_name = kept_device_name(
+        existing_controller.name if existing_controller else None, CONTROLLER_DEVICE_NAME
+    )
+    coordinator.main_device_id = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, "hch5_mk1_hac1")},
-        name=main_device_name(mk2_info),
+        name=coordinator.main_device_name,
         manufacturer="Dantherm",
         model=main_device_model(mk2_info),
         sw_version=mk2_info.firmware if mk2_info else None,

@@ -149,7 +149,7 @@ class PassiveLinkEntity(CoordinatorEntity[PassiveLinkCoordinator]):
             mk2_info = getattr(coordinator, "mk2_info", None)
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, "hch5_mk1_hac1")},
-                name=main_device_name(mk2_info),
+                name=getattr(coordinator, "main_device_name", None) or main_device_name(mk2_info),
                 manufacturer="Dantherm",
                 model=main_device_model(mk2_info),
             )

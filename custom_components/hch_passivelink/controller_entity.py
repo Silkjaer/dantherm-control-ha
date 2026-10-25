@@ -4,7 +4,7 @@ from __future__ import annotations
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import CONTROLLER_DEVICE_NAME, DOMAIN
 from .entity import OPTIONAL_CONTROLLER_KEYS, parent_link
 
 
@@ -20,7 +20,7 @@ class ControllerEntity(CoordinatorEntity):
         self._attr_unique_id = f"hch5_pi_controller_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "hch5_pi_controller")},
-            name="Dantherm Control controller",
+            name=getattr(coordinator, "controller_device_name", None) or CONTROLLER_DEVICE_NAME,
             manufacturer="Dantherm / Dantherm Control",
             model="Raspberry Pi controller",
             **parent_link(coordinator),
