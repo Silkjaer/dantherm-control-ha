@@ -1,12 +1,12 @@
 {
   "domain": "hch_passivelink",
-  "name": "Dantherm HCH5 Control",
+  "name": "Dantherm Control",
   "codeowners": ["@MRDonnii"],
   "config_flow": true,
-  "documentation": "https://github.com/MRDonnii/dantherm-hch5-control-ha",
+  "documentation": "https://github.com/MRDonnii/dantherm-control-ha",
   "integration_type": "device",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/MRDonnii/dantherm-hch5-control-ha/issues",
+  "issue_tracker": "https://github.com/MRDonnii/dantherm-control-ha/issues",
   "requirements": ["pyserial==3.5"],
   "version": "0.9.0-beta.2"
 }

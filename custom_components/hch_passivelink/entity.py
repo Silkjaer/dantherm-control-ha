@@ -1,10 +1,10 @@
-"""Base entity for HCH5 Control."""
+"""Base entity for Dantherm Control."""
 
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, PI_DIAGNOSTIC_KEYS
+from .const import DOMAIN, PI_DIAGNOSTIC_KEYS, main_device_model, main_device_name
 from .coordinator import PassiveLinkCoordinator
 
 MAIN_DEVICE = (DOMAIN, "hch5_mk1_hac1")
@@ -14,11 +14,17 @@ _VIA_DEVICE_ID = "via_device_id" in getattr(DeviceInfo, "__annotations__", {})
 
 
 def parent_link(coordinator) -> dict:
-    """Link a sub-device to the main HCH5 device in the way this HA supports."""
+    """Link a sub-device to the main unit device in the way this HA supports."""
     device_id = getattr(coordinator, "main_device_id", None)
     if _VIA_DEVICE_ID and device_id:
         return {"via_device_id": device_id}
     return {"via_device": MAIN_DEVICE}
+
+
+def sub_model(coordinator, hac1: str, generic: str) -> str:
+    """A sub-device model that names the HAC1 only on an MK1 + HAC1, not on a unit read over Modbus."""
+    return generic if getattr(coordinator, "mk2_info", None) is not None else hac1
+
 
 AFTERHEAT_KEYS = {
     "afterheat_setpoint",
@@ -104,7 +110,7 @@ class PassiveLinkEntity(CoordinatorEntity[PassiveLinkCoordinator]):
                 identifiers={(DOMAIN, "hch5_mk1_hac1_indoor_climate")},
                 name="Indeklima",
                 manufacturer="Dantherm",
-                model="HAC1 indeklimasensor",
+                model=sub_model(coordinator, "HAC1 indeklimasensor", "Indeklimasensor"),
                 **parent_link(coordinator),
             )
         elif key in AFTERHEAT_KEYS or key in PREHEATER_KEYS:
@@ -112,7 +118,7 @@ class PassiveLinkEntity(CoordinatorEntity[PassiveLinkCoordinator]):
                 identifiers={(DOMAIN, "hch5_mk1_hac1_afterheat")},
                 name="Eftervarme",
                 manufacturer="Dantherm",
-                model="HAC1 eftervarme",
+                model=sub_model(coordinator, "HAC1 eftervarme", "Eftervarme"),
                 **parent_link(coordinator),
             )
         elif key in PI_KEYS:
@@ -120,7 +126,7 @@ class PassiveLinkEntity(CoordinatorEntity[PassiveLinkCoordinator]):
                 identifiers={(DOMAIN, "hch5_mk1_hac1_pi")},
                 name="Raspberry Pi",
                 manufacturer="Raspberry Pi Foundation",
-                model="HCH5 Control gateway host",
+                model="Dantherm Control gateway host",
                 **parent_link(coordinator),
             )
         elif key in FILTER_KEYS:
@@ -128,7 +134,7 @@ class PassiveLinkEntity(CoordinatorEntity[PassiveLinkCoordinator]):
                 identifiers={(DOMAIN, "hch5_mk1_filter")},
                 name="Filter",
                 manufacturer="Dantherm",
-                model="HCH5 filtertimer",
+                model="Filtertimer",
                 **parent_link(coordinator),
             )
         elif key in ALARM_KEYS:
@@ -136,16 +142,16 @@ class PassiveLinkEntity(CoordinatorEntity[PassiveLinkCoordinator]):
                 identifiers={(DOMAIN, "hch5_mk1_hac1_alarms")},
                 name="Alarmer",
                 manufacturer="Dantherm",
-                model="HCH5 derived fault monitoring",
+                model="Derived fault monitoring",
                 **parent_link(coordinator),
             )
         else:
             mk2_info = getattr(coordinator, "mk2_info", None)
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, "hch5_mk1_hac1")},
-                name="Dantherm HCH5 Control",
+                name=main_device_name(mk2_info),
                 manufacturer="Dantherm",
-                model=mk2_info.model if mk2_info else "HCH5 MK1 + HAC1",
+                model=main_device_model(mk2_info),
             )
 
     @property

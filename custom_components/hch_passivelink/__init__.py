@@ -1,4 +1,4 @@
-"""HCH5 Control integration."""
+"""Dantherm Control integration (formerly Dantherm HCH5 Control)."""
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -53,8 +53,10 @@ from .const import (
     CONNECTION_TCP,
     CONF_UNIT_ID,
     DEFAULT_MK2_PORT,
-    DEFAULT_NAME,
     DOMAIN,
+    main_device_model,
+    main_device_name,
+    renamed_entry_title,
 )
 from .auxiliary import AuxiliaryTemperatureClient
 from .coordinator import ISSUE_CONNECTION_LOST, ISSUE_HAC1_DISCONNECTED
@@ -139,28 +141,29 @@ async def _async_reload_entry(hass: HomeAssistant, entry: PassiveLinkConfigEntry
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: PassiveLinkConfigEntry) -> bool:
-    if entry.title == "Dantherm HCH PassiveLink":
-        # The integration was renamed; only the untouched default title moves.
-        hass.config_entries.async_update_entry(entry, title="Dantherm HCH5 Control")
     config = {**entry.data, **entry.options}
     connection_type = config.get(CONF_CONNECTION_TYPE, CONNECTION_TCP)
     mk2_info = None
     if connection_type == CONNECTION_SERIAL:
         client = PassiveSerialClient(config[CONF_SERIAL_PORT], lambda _: None)
-        task_name = "Dantherm HCH5 Control USB-RS485"
+        task_name = "Dantherm Control USB-RS485"
     elif connection_type == CONNECTION_MK2:
         client = Mk2Client(
             config[CONF_HOST], int(config.get(CONF_PORT, DEFAULT_MK2_PORT)), int(config.get(CONF_UNIT_ID, 1)), lambda _: None
         )
-        task_name = "Dantherm HCH5 MKII Modbus TCP"
+        task_name = "Dantherm Control Modbus TCP"
         try:
             await client.probe()
             mk2_info = client.unit.info
         except (OSError, ValueError, TimeoutError) as err:
-            raise ConfigEntryNotReady(f"HCH5 MKII does not answer: {err}") from err
+            raise ConfigEntryNotReady(f"The Dantherm unit does not answer over Modbus TCP: {err}") from err
     else:
         client = PassiveLinkClient(config[CONF_HOST], config[CONF_PORT], lambda _: None)
-        task_name = "Dantherm HCH5 Control TCP"
+        task_name = "Dantherm Control TCP"
+    # The integration was renamed; only an untouched default title moves.
+    new_title = renamed_entry_title(entry.title, mk2_info.model if mk2_info else None)
+    if new_title:
+        hass.config_entries.async_update_entry(entry, title=new_title)
 
     session = async_get_clientsession(hass)
     controller_client = None
@@ -218,9 +221,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: PassiveLinkConfigEntry) 
     coordinator.main_device_id = dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, "hch5_mk1_hac1")},
-        name=DEFAULT_NAME,
+        name=main_device_name(mk2_info),
         manufacturer="Dantherm",
-        model=mk2_info.model if mk2_info else "HCH5 MK1 + HAC1",
+        model=main_device_model(mk2_info),
         sw_version=mk2_info.firmware if mk2_info else None,
     ).id
     entry.runtime_data = coordinator

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only RS485 to raw TCP mirror for Dantherm HCH5 Control."""
+"""Read-only RS485 to raw TCP mirror for Dantherm Control."""
 
 from __future__ import annotations
 

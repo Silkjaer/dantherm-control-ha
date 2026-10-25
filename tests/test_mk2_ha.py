@@ -12,7 +12,9 @@ import pytest
 pytest.importorskip("pytest_homeassistant_custom_component")
 
 from homeassistant import config_entries  # noqa: E402
+from homeassistant.helpers import device_registry as dr  # noqa: E402
 from homeassistant.helpers import entity_registry as er  # noqa: E402
+from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).parents[1]))  # custom_components/
 sys.path.insert(0, str(Path(__file__).parent))
@@ -66,7 +68,7 @@ async def test_mk2_setup_entities_and_controls(hass, sim):
         result["flow_id"], {"host": "127.0.0.1", "port": sim.port, "unit_id": 1}
     )
     assert result["type"] == "create_entry", result
-    assert "HCH 5 MKII" in result["title"]
+    assert result["title"] == "Dantherm Control (HCH 5 MKII)"
     await _until(hass, lambda: hass.states.get(_entity(hass, "select", "mk2_operation")) is not None)
 
     operation = _entity(hass, "select", "mk2_operation")
@@ -124,3 +126,25 @@ async def test_mk2_unreachable_shows_cannot_connect(hass, socket_enabled):
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"connection_type": "mk2_tcp"})
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {"host": "127.0.0.1", "port": 1, "unit_id": 1})
     assert result["type"] == "form" and result["errors"] == {"base": "cannot_connect"}
+
+
+async def test_modbus_unit_is_named_after_its_model(hass, sim):
+    """An RCV320 P2 (type 21): device named after the model, no HCH5/HAC1 in sub-device models."""
+    sim.set_u32(mk2.REG_SYSTEM_ID, 21 << 24 | 0x0105)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Dantherm HCH5 Control (Dantherm type 21)",  # the default title of 0.9.0-beta.1/2
+        data={"connection_type": "mk2_tcp", "host": "127.0.0.1", "port": sim.port, "unit_id": 1},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await _until(hass, lambda: hass.states.get(_entity(hass, "sensor", "filter_days_remaining")) is not None)
+    assert entry.title == "Dantherm Control (RCV320 P2)"
+    devices = dr.async_get(hass)
+    main = devices.async_get_device(identifiers={(DOMAIN, "hch5_mk1_hac1")})
+    assert main.name == "Dantherm RCV320 P2" and main.model == "RCV320 P2"
+    models = {
+        device.model for device in dr.async_entries_for_config_entry(devices, entry.entry_id)
+    }
+    assert "Filtertimer" in models and "Indeklimasensor" in models
+    assert not any("HCH5" in model or "HAC1" in model for model in models)

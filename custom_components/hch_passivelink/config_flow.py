@@ -1,4 +1,4 @@
-"""Config flow for HCH5 Control."""
+"""Config flow for Dantherm Control."""
 
 from __future__ import annotations
 
@@ -82,6 +82,15 @@ ENERGY_SIGNAL_KINDS = {
 }
 
 
+# Passive RS485 is for an HCH5 MK1 + HAC1; units with the Dantherm Residential
+# Modbus map are read and controlled over Modbus TCP.
+CONNECTION_LABELS = {
+    CONNECTION_TCP: "HCH5 MK1 + HAC1 – RS485 over TCP",
+    CONNECTION_SERIAL: "HCH5 MK1 + HAC1 – USB-RS485",
+    CONNECTION_MK2: "Dantherm Modbus TCP (HCH5 MKII, RCV, HCV, HCC)",
+}
+
+
 class PassiveLinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -95,14 +104,12 @@ class PassiveLinkConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
-                vol.Required(CONF_CONNECTION_TYPE, default=CONNECTION_TCP): vol.In(
-                    {CONNECTION_TCP: "RS485 over TCP", CONNECTION_SERIAL: "USB-RS485", CONNECTION_MK2: "HCH5 MKII – Modbus TCP"}
-                )
+                vol.Required(CONF_CONNECTION_TYPE, default=CONNECTION_TCP): vol.In(CONNECTION_LABELS)
             }),
         )
 
     async def async_step_mk2(self, user_input: dict | None = None) -> FlowResult:
-        """HCH5 MKII directly over Modbus TCP – readings and controls without the Pi."""
+        """A Dantherm unit (HCH5 MKII, RCV, HCV, HCC) over Modbus TCP – readings and controls without the Pi."""
         errors = {}
         if user_input is not None:
             host, port = user_input[CONF_HOST].strip(), int(user_input[CONF_PORT])
@@ -377,7 +384,7 @@ class PassiveLinkOptionsFlow(config_entries.OptionsFlow):
             vol.Required(
                 CONF_CONNECTION_TYPE,
                 default=current.get(CONF_CONNECTION_TYPE, CONNECTION_TCP),
-            ): vol.In({CONNECTION_TCP: "RS485 over TCP", CONNECTION_SERIAL: "USB-RS485", CONNECTION_MK2: "HCH5 MKII – Modbus TCP"}),
+            ): vol.In(CONNECTION_LABELS),
             vol.Optional(CONF_HOST, default=current.get(CONF_HOST, "")): str,
             vol.Required(CONF_PORT, default=current.get(CONF_PORT, DEFAULT_PORT)): vol.All(
                 vol.Coerce(int), vol.Range(min=1, max=65535)

@@ -43,6 +43,25 @@ def test_identify_and_snapshot_over_tcp(sim_tcp):
     assert data["alarm"] == "none" and data["hac1_connected"] is True
 
 
+def test_model_names_follow_the_device_type():
+    assert mk2.model_name(mk2.DEVICE_TYPE_HCH5_MK2) == "HCH 5 MKII"
+    assert mk2.model_name(21) == "RCV320 P2"
+    assert mk2.model_name(26) == "RCV320 P1"
+    assert mk2.model_name(9) == "HCV400 P2"
+    assert mk2.model_name(4) == "HCC 2"
+    assert mk2.model_name(99) == "Dantherm type 99"
+
+
+def test_identify_names_other_units_by_their_type(sim_tcp):
+    sim, unit = sim_tcp
+    sim.set_u32(mk2.REG_SYSTEM_ID, 21 << 24 | 0x0105)
+    info = unit.identify()
+    assert info.device_type == 21 and info.model == "RCV320 P2"
+    assert unit.snapshot()["unit_model"] == "RCV320 P2"
+    sim.set_u32(mk2.REG_SYSTEM_ID, 99 << 24)
+    assert unit.identify().model == "Dantherm type 99"
+
+
 def test_level_switches_to_manual_and_standby(sim_tcp):
     sim, unit = sim_tcp
     unit.set_level(4)

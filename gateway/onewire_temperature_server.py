@@ -36,7 +36,7 @@ THROTTLED_BITS = {
 }
 
 
-# The HCH5 Control WebUI on the same Pi, when installed, lets the owner choose
+# The Dantherm Control WebUI on the same Pi, when installed, lets the owner choose
 # which sensor is flow and which is return. Its choice wins; without it this
 # service works exactly as before.
 CONTROLLER_URL = "http://127.0.0.1:8080/api/onewire/water"
@@ -126,7 +126,7 @@ class SensorReader:
             for path in Path("/sys/bus/w1/devices").glob("28-*")
             if (path / "w1_slave").exists()
         )
-        # 0) The choice made in the HCH5 Control WebUI wins, and is saved so it
+        # 0) The choice made in the Dantherm Control WebUI wins, and is saved so it
         #    also holds while the WebUI is down.
         chosen = self._controller_ids()
         if all(sensor_id and sensor_id in discovered for sensor_id in chosen) and chosen[0] != chosen[1]:
@@ -307,7 +307,7 @@ class CachedReader:
 
     A DS18B20 conversion takes about 0.75 s and the kernel reads one sensor
     at a time. Reading on every request made callers that asked at the same
-    time (Home Assistant, the HCH5 Control WebUI) wait up to six seconds.
+    time (Home Assistant, the Dantherm Control WebUI) wait up to six seconds.
     """
 
     def __init__(self, reader: SensorReader, interval: float = READ_INTERVAL_SECONDS) -> None:
@@ -381,7 +381,7 @@ def main() -> None:
     parser.add_argument("--bind", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=4197)
     parser.add_argument("--controller-url", default=CONTROLLER_URL,
-                        help="HCH5 Control flow/return choice; empty to ignore")
+                        help="Dantherm Control WebUI flow/return choice; empty to ignore")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     reader = CachedReader(SensorReader(args.config, args.controller_url or None))

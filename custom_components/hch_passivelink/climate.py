@@ -15,7 +15,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .entity import parent_link
+from .entity import parent_link, sub_model
 from .controller_entity import ControllerEntity
 
 
@@ -36,7 +36,7 @@ class AfterheatClimate(ControllerEntity, ClimateEntity):
             identifiers={(DOMAIN, "hch5_mk1_hac1_afterheat")},
             name="Eftervarme",
             manufacturer="Dantherm",
-            model="HAC1 eftervarme",
+            model=sub_model(coordinator, "HAC1 eftervarme", "Eftervarme"),
             **parent_link(coordinator),
         )
 

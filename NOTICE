@@ -1,9 +1,10 @@
-HCH5 Control
+Dantherm Control (formerly HCH5 Control)
 Copyright MRDonnii
 
-The HCH5 MKII support (custom_components/hch_passivelink/mk2.py) uses the Dantherm Residential Modbus
-register map – register addresses, data types, unit modes and alarm codes –
-as documented by the Tvalley71/dantherm Home Assistant integration:
+The Dantherm Modbus support (custom_components/hch_passivelink/mk2.py) uses
+the Dantherm Residential Modbus register map – register addresses, data types,
+unit modes, alarm codes and the device-type model names – as documented by the
+Tvalley71/dantherm Home Assistant integration:
 
   Dantherm integration for Home Assistant
   https://github.com/Tvalley71/dantherm

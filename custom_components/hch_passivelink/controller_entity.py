@@ -1,4 +1,4 @@
-"""Base entities for the Raspberry Pi HCH controller."""
+"""Base entities for the Raspberry Pi controller (Dantherm Control)."""
 from __future__ import annotations
 
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -20,8 +20,8 @@ class ControllerEntity(CoordinatorEntity):
         self._attr_unique_id = f"hch5_pi_controller_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, "hch5_pi_controller")},
-            name="Dantherm HCH5 controller",
-            manufacturer="Dantherm / HCH5 Control",
+            name="Dantherm Control controller",
+            manufacturer="Dantherm / Dantherm Control",
             model="Raspberry Pi controller",
             **parent_link(coordinator),
         )

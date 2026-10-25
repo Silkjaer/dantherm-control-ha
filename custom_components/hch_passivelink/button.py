@@ -1,4 +1,4 @@
-"""Filter-reset button for HCH5 Control."""
+"""Filter-reset button for Dantherm Control."""
 
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.config_entries import ConfigEntry

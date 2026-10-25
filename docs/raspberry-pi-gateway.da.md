@@ -1,6 +1,6 @@
 # Billig Raspberry Pi RS485-gateway
 
-Denne guide beskriver en lille, automatisk og read-only RS485-til-Ethernet-gateway til Dantherm HCH5 MK1. Den er afprøvet på en Raspberry Pi 2 Model B med en FTDI-baseret USB-RS485-adapter. Home Assistant forbinder til gatewayens rå TCP-port gennem Dantherm HCH5 Control.
+Denne guide beskriver en lille, automatisk og read-only RS485-til-Ethernet-gateway til Dantherm HCH5 MK1. Den er afprøvet på en Raspberry Pi 2 Model B med en FTDI-baseret USB-RS485-adapter. Home Assistant forbinder til gatewayens rå TCP-port gennem Dantherm Control.
 
 Gatewayen er ikke en Modbus-master. Den sender ingen forespørgsler eller kommandoer til anlægget, men videresender kun de bytes, som allerede findes på RS485-bussen. Dantherms eksisterende styring fortsætter derfor uændret.
 
@@ -114,8 +114,8 @@ køres igen ved en senere opdatering og gemmer adapterstien i en separat
 konfigurationsfil:
 
 ```bash
-git clone https://github.com/MRDonnii/dantherm-hch5-control-ha.git
-cd dantherm-hch5-control-ha
+git clone https://github.com/MRDonnii/dantherm-control-ha.git
+cd dantherm-control-ha
 sudo gateway/install.sh --device /dev/serial/by-id/DIN_ADAPTER
 ```
 
@@ -136,7 +136,7 @@ Hent programmet og opret et isoleret Python-miljø:
 
 ```bash
 sudo curl -fsSL \
-  https://raw.githubusercontent.com/MRDonnii/dantherm-hch5-control-ha/main/gateway/passivelink_gateway.py \
+  https://raw.githubusercontent.com/MRDonnii/dantherm-control-ha/main/gateway/passivelink_gateway.py \
   -o /opt/dantherm-passivelink/passivelink_gateway.py
 sudo chown passivelink:passivelink /opt/dantherm-passivelink/passivelink_gateway.py
 sudo -u passivelink python3 -m venv /opt/dantherm-passivelink/venv
@@ -150,7 +150,7 @@ Hent servicefilen:
 
 ```bash
 sudo curl -fsSL \
-  https://raw.githubusercontent.com/MRDonnii/dantherm-hch5-control-ha/main/gateway/dantherm-passivelink.service \
+  https://raw.githubusercontent.com/MRDonnii/dantherm-control-ha/main/gateway/dantherm-passivelink.service \
   -o /etc/systemd/system/dantherm-passivelink.service
 ```
 
@@ -240,11 +240,11 @@ Eksponér aldrig port 4196 mod internettet. Brug ikke port-forwarding.
 
 ## 8. Tilføj gatewayen i Home Assistant
 
-1. Installér **Dantherm HCH5 Control** gennem HACS.
+1. Installér **Dantherm Control** gennem HACS.
 2. Genstart Home Assistant.
 3. Åbn **Indstillinger → Enheder og tjenester → Tilføj integration**.
-4. Vælg **Dantherm HCH5 Control**.
-5. Vælg **RS485 over TCP**.
+4. Vælg **Dantherm Control**.
+5. Vælg **HCH5 MK1 + HAC1 – RS485 over TCP**.
 6. Indtast Pi'ens reserverede eller faste IP-adresse.
 7. Indtast port `4196`.
 
@@ -311,7 +311,7 @@ journalctl -u dantherm-passivelink.service -n 100 --no-pager
 ```bash
 sudo systemctl stop dantherm-passivelink.service
 sudo curl -fsSL \
-  https://raw.githubusercontent.com/MRDonnii/dantherm-hch5-control-ha/main/gateway/passivelink_gateway.py \
+  https://raw.githubusercontent.com/MRDonnii/dantherm-control-ha/main/gateway/passivelink_gateway.py \
   -o /opt/dantherm-passivelink/passivelink_gateway.py
 sudo chown passivelink:passivelink /opt/dantherm-passivelink/passivelink_gateway.py
 sudo systemctl start dantherm-passivelink.service
@@ -382,8 +382,8 @@ curl http://127.0.0.1:4197/temperatures
 
 Et normalt svar indeholder `available: true` og begge temperaturer, samt en
 række `pi_*`-felter med Raspberry Pi-diagnostik (se nedenfor). I Home
-Assistant åbnes **Indstillinger → Enheder og tjenester → Dantherm HCH5
-Control → Konfigurer**. Aktivér de valgfrie vandforvarmefølere, angiv Pi'ens
+Assistant åbnes **Indstillinger → Enheder og tjenester → Dantherm Control →
+Konfigurer**. Aktivér de valgfrie vandforvarmefølere, angiv Pi'ens
 IP-adresse og port `4197`. Der oprettes en særskilt enhed med fremtemperatur,
 returtemperatur, delta-T, varmeoverførsel og forbindelsesstatus. Hvis frem og
 retur vises omvendt, aktivér **Byt frem- og returføler** i samme indstillinger;

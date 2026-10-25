@@ -1,4 +1,4 @@
-"""Sensors for HCH5 Control."""
+"""Sensors for Dantherm Control."""
 
 from dataclasses import dataclass
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription, SensorStateClass

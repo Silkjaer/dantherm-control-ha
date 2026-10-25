@@ -1,7 +1,7 @@
 # Raspberry Pi RS485 gateway
 
 This folder is a self-contained companion project for
-[Dantherm HCH5 Control](../README.md). It turns a Raspberry Pi with a
+[Dantherm Control](../README.md). It turns a Raspberry Pi with a
 USB-RS485 adapter into a receive-only RS485-to-Ethernet bridge.
 
 The bridge mirrors observed `19200 8E1` bytes to raw TCP port `4196`. It does
@@ -57,8 +57,8 @@ Install Raspberry Pi OS Lite (32-bit), enable SSH and connect the Pi by
 Ethernet. Clone this repository on the Pi, then run:
 
 ```bash
-git clone https://github.com/MRDonnii/dantherm-hch5-control-ha.git
-cd dantherm-hch5-control-ha
+git clone https://github.com/MRDonnii/dantherm-control-ha.git
+cd dantherm-control-ha
 ls -l /dev/serial/by-id/
 sudo gateway/install.sh --device /dev/serial/by-id/YOUR_ADAPTER
 ```
@@ -73,8 +73,8 @@ journalctl -u dantherm-passivelink.service -n 50 --no-pager
 ss -lntp | grep 4196
 ```
 
-Then add the Home Assistant integration in **RS485 over TCP** mode and enter
-the Raspberry Pi address and port `4196`.
+Then add the Home Assistant integration in **HCH5 MK1 + HAC1 – RS485 over TCP**
+mode and enter the Raspberry Pi address and port `4196`.
 
 For wiring, fixed IP configuration, watchdog, firewall, troubleshooting and
 the optional water-preheater probes, follow the complete guides:

@@ -1,11 +1,12 @@
-"""Dantherm HCH5 MKII over Modbus (the "Dantherm Residential" register map).
+"""Dantherm units over Modbus (the "Dantherm Residential" register map).
 
-Shared by the Home Assistant integration and the HCH5 Control gateway; uses
-only the standard library. MK1/HAC1 installations are not affected.
+HCH5 MKII, RCV, HCV and HCC units share this map. Shared by the Home Assistant
+integration and the Dantherm Control Pi gateway; uses only the standard
+library. MK1/HAC1 installations are not affected.
 
-Register addresses, data types, unit modes and alarm codes follow the
-Tvalley71/dantherm integration (https://github.com/Tvalley71/dantherm),
-Apache License 2.0. See NOTICE.
+Register addresses, data types, unit modes, alarm codes and the device-type
+model names follow the Tvalley71/dantherm integration
+(https://github.com/Tvalley71/dantherm), Apache License 2.0. See NOTICE.
 
 Values are 32-bit: two holding registers, low word first. Temperatures and
 fan speeds are float32, everything else uint32.
@@ -58,6 +59,34 @@ REG_FILTER_DIRTINESS = 612
 REG_WORK_TIME = 624  # hours
 
 DEVICE_TYPE_HCH5_MK2 = 23
+
+# Device type (high byte of REG_SYSTEM_ID) -> model name, as listed by Tvalley71/dantherm.
+DEVICE_MODELS = {
+    1: "WG200",
+    2: "WG300",
+    3: "WG500",
+    4: "HCC 2",
+    5: "HCC 2 ALU",
+    6: "HCV300 ALU",
+    7: "HCV500 ALU",
+    8: "HCV700 ALU",
+    9: "HCV400 P2",
+    10: "HCV400 E1",
+    11: "HCV400 P1",
+    12: "HCC 2 E1",
+    14: "HCV400 P1-E1",
+    15: "HCV460 P2",
+    19: "HCV460 E1",
+    21: "RCV320 P2",
+    DEVICE_TYPE_HCH5_MK2: "HCH 5 MKII",
+    26: "RCV320 P1",
+    27: "RCC220 P2",
+}
+
+
+def model_name(device_type: int) -> str:
+    """The unit's model, or "Dantherm type N" for a type not in the table."""
+    return DEVICE_MODELS.get(device_type, f"Dantherm type {device_type}")
 
 # Current unit mode (REG_CURRENT_MODE).
 MODE_STANDBY = 0
@@ -328,7 +357,7 @@ class Mk2Info:
 
 
 class Mk2Unit:
-    """Read a snapshot and send commands to an HCH5 MKII."""
+    """Read a snapshot and send commands to a Dantherm unit (HCH5 MKII, RCV, HCV, HCC)."""
 
     def __init__(self, transport: Transport) -> None:
         self.transport = transport
@@ -354,8 +383,7 @@ class Mk2Unit:
         except ModbusError:
             components = 0
         device_type = system_id >> 24
-        model = "HCH 5 MKII" if device_type == DEVICE_TYPE_HCH5_MK2 else f"Dantherm type {device_type}"
-        self.info = Mk2Info(device_type, model, f"{(firmware >> 8) & 0xFF}.{firmware & 0xFF:02d}", serial, components)
+        self.info = Mk2Info(device_type, model_name(device_type), f"{(firmware >> 8) & 0xFF}.{firmware & 0xFF:02d}", serial, components)
         return self.info
 
     def snapshot(self) -> dict[str, object]:

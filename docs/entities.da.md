@@ -1,6 +1,6 @@
 # Sensorer og alarmer
 
-Dette er den korrekte betydning af HCH5 Control-entiteterne for HCH5 MK1 med
+Dette er den korrekte betydning af Dantherm Control-entiteterne for HCH5 MK1 med
 HAC1. Integrationen aflæser kun observeret RS485-trafik; den sender ingen
 Modbus-forespørgsler eller kommandoer.
 

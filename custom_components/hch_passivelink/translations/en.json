@@ -1,10 +1,10 @@
 {
-  "title": "Dantherm HCH5 Control",
+  "title": "Dantherm Control",
   "config": {
     "step": {
-      "user": {"title": "Choose the passive RS485 connection", "description": "Choose a transparent RS485-over-TCP adapter or a USB-RS485 adapter connected directly to the Home Assistant host. Both modes are read-only.", "data": {"connection_type": "Connection type"}},
+      "user": {"title": "Choose the connection", "description": "An HCH5 MK1 with HAC1 is read passively through a transparent RS485-over-TCP adapter or a USB-RS485 adapter connected directly to the Home Assistant host; both modes are read-only. A Dantherm unit with the Dantherm Residential Modbus map (HCH5 MKII, RCV, HCV, HCC) is read and controlled over Modbus TCP.", "data": {"connection_type": "Connection type"}},
       "tcp": {"title": "Connect using RS485 over TCP", "description": "Enter the address of the adapter's raw TCP stream. The integration never sends requests or commands.", "data": {"host": "Host or IP address", "port": "TCP port"}},
-      "mk2": {"title": "HCH5 MKII over Modbus TCP", "description": "Connect directly to an HCH5 MKII (Dantherm Residential Modbus). You get readings and control of operation mode, fan step, bypass, filter and alarms – no Raspberry Pi needed.", "data": {"host": "IP address", "port": "Port", "unit_id": "Modbus address"}},
+      "mk2": {"title": "Dantherm unit over Modbus TCP", "description": "Connect directly to a Dantherm unit with the Dantherm Residential Modbus map – HCH5 MKII, RCV, HCV or HCC – over Modbus TCP. You get readings and control of operation mode, fan step, bypass, filter and alarms – no Raspberry Pi needed.", "data": {"host": "IP address", "port": "Port", "unit_id": "Modbus address"}},
       "serial": {"title": "Connect using USB-RS485", "description": "Enter the stable device path, preferably /dev/serial/by-id/.... The port is opened read-only at 19200 8E1 and the integration never calls write().", "data": {"serial_port": "Serial device path"}}
     },
     "error": {"cannot_connect": "Connected, but no valid Dantherm RTU traffic was received."},
@@ -106,7 +106,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Dantherm HCH5 Control settings",
+        "title": "Dantherm Control settings",
         "description": "Change the connection, controller and integration settings. The classic listening data path remains read-only.",
         "data": {
           "connection_type": "Connection type",
@@ -205,7 +205,7 @@
       "remove_room": {"title": "Remove Smart Auto room", "description": "Only removes the room from Dantherm Smart Auto. The selected Home Assistant sensor is not deleted.", "data": {"room": "Room"}},
       "finish_rooms": {"title": "Save Smart Auto rooms"},
       "tcp": {"title": "RS485 over TCP", "description": "Enter the IP address and TCP port of the Raspberry Pi gateway or RS485-to-Ethernet adapter.", "data": {"host": "IP address or host name", "port": "TCP port"}},
-      "mk2": {"title": "HCH5 MKII over Modbus TCP", "description": "Connect directly to an HCH5 MKII (Dantherm Residential Modbus). You get readings and control of operation mode, fan step, bypass, filter and alarms – no Raspberry Pi needed.", "data": {"host": "IP address", "port": "Port", "unit_id": "Modbus address"}},
+      "mk2": {"title": "Dantherm unit over Modbus TCP", "description": "Connect directly to a Dantherm unit with the Dantherm Residential Modbus map – HCH5 MKII, RCV, HCV or HCC – over Modbus TCP. You get readings and control of operation mode, fan step, bypass, filter and alarms – no Raspberry Pi needed.", "data": {"host": "IP address", "port": "Port", "unit_id": "Modbus address"}},
       "serial": {"title": "Local USB-RS485 adapter", "description": "Enter the stable device path of the USB adapter, preferably /dev/serial/by-id/....", "data": {"serial_port": "Serial device path"}}
     },
     "error": {
@@ -219,7 +219,7 @@
     }
   },
   "issues": {
-    "connection_lost": {"title": "No connection to the RS485 gateway", "description": "Dantherm HCH5 Control has been unable to connect to the configured RS485 gateway for more than 15 minutes. Check the gateway's power, network connection, and that the transparent TCP stream is still active. Open the integration's options if the address has changed."},
+    "connection_lost": {"title": "No connection to the gateway or unit", "description": "Dantherm Control has been unable to connect to the configured RS485 gateway or Modbus TCP unit for more than 15 minutes. Check its power and network connection, and that the transparent TCP stream or Modbus TCP is still active. Open the integration's options if the address has changed."},
     "hac1_disconnected": {"title": "HAC1 indoor-climate module not responding", "description": "RS485 traffic from the Dantherm unit is still present, but the HAC1 module (CO2/indoor climate) has not reported itself as connected for more than 15 minutes. Check the HAC1 module's wiring and power."}
   }
 }

@@ -112,7 +112,7 @@ systemctl enable --now dantherm-passivelink.service
 systemctl restart dantherm-passivelink.service
 
 echo
-echo "Dantherm HCH5 Control gateway installed."
+echo "Dantherm Control gateway installed."
 systemctl --no-pager --full status dantherm-passivelink.service || true
 
 if [[ ${enable_onewire} -eq 1 ]]; then

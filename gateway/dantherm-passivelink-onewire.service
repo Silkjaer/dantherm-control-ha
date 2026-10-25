@@ -1,5 +1,5 @@
 [Unit]
-Description=Dantherm HCH5 Control optional DS18B20 service
+Description=Dantherm Control optional DS18B20 service
 After=network-online.target sys-subsystem-w1-devices.device
 Wants=network-online.target
 

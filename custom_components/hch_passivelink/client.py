@@ -170,7 +170,7 @@ class PassiveSerialClient:
 
 
 class Mk2Client:
-    """Poll an HCH5 MKII over Modbus TCP and send it commands (direct, no Pi needed)."""
+    """Poll a Dantherm unit over Modbus TCP and send it commands (direct, no Pi needed)."""
 
     POLL_SECONDS = 10
 

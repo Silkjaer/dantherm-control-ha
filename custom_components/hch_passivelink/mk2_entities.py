@@ -1,4 +1,4 @@
-"""Direct controls for an HCH5 MKII (used when it is connected over Modbus TCP without the Pi)."""
+"""Direct controls for a Dantherm Modbus unit (HCH5 MKII, RCV, HCV, HCC) connected over Modbus TCP without the Pi."""
 
 from __future__ import annotations
 

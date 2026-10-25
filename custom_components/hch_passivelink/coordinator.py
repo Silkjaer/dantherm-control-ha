@@ -1,4 +1,4 @@
-"""Coordinator for HCH5 Control."""
+"""Coordinator for Dantherm Control."""
 
 import asyncio
 import logging
@@ -17,7 +17,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import slugify
 
 from .alarms import derive_alarm_values
-from .const import DOMAIN, PI_DIAGNOSTIC_KEYS
+from .const import DEFAULT_NAME, DOMAIN, PI_DIAGNOSTIC_KEYS
 from .filter import filter_values
 from .parser import TEMPERATURE_KEYS
 
@@ -53,7 +53,7 @@ class PassiveLinkCoordinator(DataUpdateCoordinator[dict[str, object]]):
         notify_service: str,
         auxiliary_client=None,
     ) -> None:
-        super().__init__(hass, logger=__import__("logging").getLogger(__name__), name="Dantherm HCH5 Control")
+        super().__init__(hass, logger=__import__("logging").getLogger(__name__), name=DEFAULT_NAME)
         self.data = {}
         self.client = client
         self.mk2_info = None

@@ -1,8 +1,14 @@
-"""Constants for HCH5 Control."""
+"""Constants for Dantherm Control (formerly Dantherm HCH5 Control)."""
 
 DOMAIN = "hch_passivelink"
 DEFAULT_PORT = 4196
-DEFAULT_NAME = "Dantherm HCH5 Control"
+DEFAULT_NAME = "Dantherm Control"
+# Default entry titles of earlier versions; only these untouched defaults are renamed.
+OLD_DEFAULT_NAMES = ("Dantherm HCH PassiveLink", "Dantherm HCH5 Control")
+# The main device of a passive MK1 + HAC1 install keeps its name, so entities that
+# appear in later versions get the same entity_id prefix as the existing ones.
+MK1_DEVICE_NAME = "Dantherm HCH5 Control"
+MK1_DEVICE_MODEL = "HCH5 MK1 + HAC1"
 CONF_CONNECTION_TYPE = "connection_type"
 CONF_SERIAL_PORT = "serial_port"
 CONNECTION_MK2 = "mk2_tcp"
@@ -78,6 +84,36 @@ def room_humidity_key(slot: int) -> str:
 
 def room_co2_key(slot: int) -> str:
     return f"smart_room_{slot}_co2"
+
+
+def main_device_name(mk2_info=None) -> str:
+    """The main device's name: "Dantherm <model>" over Modbus, unchanged on an MK1 + HAC1."""
+    if mk2_info is None:
+        return MK1_DEVICE_NAME
+    model = str(mk2_info.model)
+    return model if model.startswith("Dantherm") else f"Dantherm {model}"
+
+
+def main_device_model(mk2_info=None) -> str:
+    return mk2_info.model if mk2_info is not None else MK1_DEVICE_MODEL
+
+
+def renamed_entry_title(title: str, mk2_model: str | None = None) -> str | None:
+    """The new title for an entry still carrying an old default title, else None.
+
+    Titles the user has changed are left alone. A Modbus entry's default title
+    also named the unit, e.g. "Dantherm HCH5 Control (Dantherm type 21)".
+    """
+    if title in OLD_DEFAULT_NAMES:
+        return DEFAULT_NAME
+    if mk2_model:
+        for old in OLD_DEFAULT_NAMES:
+            prefix = f"{old} ("
+            if title.startswith(prefix) and title.endswith(")"):
+                model = title[len(prefix):-1]
+                if model == mk2_model or model.startswith("Dantherm type "):
+                    return f"{DEFAULT_NAME} ({mk2_model})"
+    return None
 
 
 # Raspberry Pi host diagnostics - reported by the same optional endpoint

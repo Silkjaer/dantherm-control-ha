@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
-  <title id="title">Passive RS485 connection for Dantherm HCH5 Control</title>
+  <title id="title">Passive RS485 connection for Dantherm Control (HCH5 MK1)</title>
   <desc id="desc">The existing controller and ventilation unit remain connected. A receive-only RS485 adapter is connected in parallel to A and B.</desc>
   <defs>
     <style>

@@ -1,28 +1,37 @@
-# Dantherm HCH5 Control
+# Dantherm Control
 
-<img src="https://raw.githubusercontent.com/MRDonnii/dantherm-hch5-control-ha/main/assets/logo.png" alt="HCH5 Control logo" width="320">
+*Formerly **Dantherm HCH5 Control**.*
+
+<img src="https://raw.githubusercontent.com/MRDonnii/dantherm-control-ha/main/assets/logo.png" alt="Dantherm Control logo" width="320">
 
 ![Illustrated tour of the Home Assistant integration](docs/images/0.8.1-beta.8/ha-integration-tour.gif)
 
 *Animated feature illustration using example values; it is not a screenshot of a live Home Assistant installation.*
 
-An unofficial Home Assistant integration for a Dantherm HCH5 MK1 with HAC1. Its classic listening data path remains read-only and decodes internal Modbus RTU traffic without transmitting. The optional Raspberry Pi controller connection sends only high-level intent and room observations to the separate Raspberry Pi controller HTTP API; Home Assistant never writes Modbus/RS485 directly.
+An unofficial Home Assistant integration for Dantherm ventilation units. It supports:
+
+- **HCH5 MK1 with HAC1** over passive RS485 (a raw TCP stream or a USB-RS485 adapter), with an optional Raspberry Pi controller. This classic listening data path remains read-only and decodes internal Modbus RTU traffic without transmitting. The optional Raspberry Pi controller connection sends only high-level intent and room observations to the separate Raspberry Pi controller HTTP API; Home Assistant never writes Modbus/RS485 directly.
+- **Dantherm units with the Dantherm Residential Modbus map** – HCH5 MKII, RCV, HCV and HCC – over Modbus TCP (beta): readings and direct controls, see [Dantherm units over Modbus TCP](#dantherm-units-over-modbus-tcp-beta).
 
 **Current published version: 0.8.1-beta.17.** It brings the HCH5's measurements into Home Assistant and, with the separate Pi controller, adds fan modes, OFF, Quick Boost, afterheat, Smart Auto rooms, sensor forwarding and air balancing. See the [complete feature list](docs/FEATURES.md), [entity reference](docs/entities.da.md) and [HACS installation](#installation-with-hacs).
 
 > **Unofficial community project:** This software was not developed, supplied, commissioned, approved, certified or supported by Dantherm Group. Dantherm Group is not affiliated with this project. “Dantherm” is used only to identify compatible equipment; all trademarks belong to their respective owners. For product service and safety questions, contact Dantherm or an authorised installer.
 
+## Renamed
+
+This integration was called **Dantherm HCH5 Control** until version 0.9.0, and its repository was `dantherm-hch5-control-ha`; GitHub redirects the old repository URLs. Only display names changed: the domain stays `hch_passivelink`, and entity IDs, unique IDs and device identifiers are unchanged, so existing installations keep their entities, history, automations and dashboards. An entry still titled with the old default name is renamed to *Dantherm Control*; a title you chose yourself is kept. A unit connected over Modbus TCP is now named after its model, e.g. *Dantherm RCV320 P2*; the device of an HCH5 MK1 + HAC1 keeps its name, and the Pi controller device is now *Dantherm Control controller*.
+
 ## Safety model
 
-The integration supports a raw TCP stream or a USB-RS485 adapter connected directly to the Home Assistant host. Both modes **only receive bytes** and contain no Modbus request generator or serial write call. Configure the serial side as `19200 8E1`. For Ethernet adapters, disable polling, Modbus TCP conversion, MQTT and any heartbeat or registration data sent over the serial port.
+For an HCH5 MK1 + HAC1, the integration supports a raw TCP stream or a USB-RS485 adapter connected directly to the Home Assistant host. Both modes **only receive bytes** and contain no Modbus request generator or serial write call. Configure the serial side as `19200 8E1`. For Ethernet adapters, disable polling, Modbus TCP conversion, MQTT and any heartbeat or registration data sent over the serial port.
 
-For direct USB use, select **USB-RS485** during setup and enter a stable path such as `/dev/serial/by-id/...`. Home Assistant must have permission to access that device, and no other process may open the same serial port.
+For direct USB use, select **HCH5 MK1 + HAC1 – USB-RS485** during setup and enter a stable path such as `/dev/serial/by-id/...`. Home Assistant must have permission to access that device, and no other process may open the same serial port.
 
 Do not use an M-Bus gateway. M-Bus is electrically incompatible with RS485.
 
 ### Optional Raspberry Pi controller
 
-Version `0.8.1-beta.17` connects to the controller API of [HCH5 Control](https://github.com/MRDonnii/dantherm-hch5-control). Current stable Pi version `1.4.0` supports the PM2.5, air-balance and fan-step fields described below. With Pi 1.4.0 the controller runs Dantherm's four fan steps (or six, chosen in the WebUI or with the *Trinstyring* select): the level select, fan presets (Boost = highest step) and level numbers follow the chosen step count, and *Trin 3 udsugning/indblæsning*, *Gearafstand trin 1-2* and *Trin 4 maks.* commission the steps as on Dantherm's HCP4 panel. The architecture is:
+Version `0.8.1-beta.17` connects to the controller API of the [Dantherm Control Pi app](https://github.com/MRDonnii/dantherm-control) (formerly HCH5 Control). Current stable Pi version `1.4.0` supports the PM2.5, air-balance and fan-step fields described below. With Pi 1.4.0 the controller runs Dantherm's four fan steps (or six, chosen in the WebUI or with the *Trinstyring* select): the level select, fan presets (Boost = highest step) and level numbers follow the chosen step count, and *Trin 3 udsugning/indblæsning*, *Gearafstand trin 1-2* and *Trin 4 maks.* commission the steps as on Dantherm's HCP4 panel. The architecture is:
 
 ```text
 Home Assistant -> authenticated controller HTTP API -> Raspberry Pi arbitration -> verified RS485 writes -> HCH5/HAC1
@@ -63,12 +72,12 @@ The controller options also accept four optional energy sensors that the Pi only
 | Electricity price | Current price in kr/kWh (øre/kWh and DKK/MWh are converted) | Approximate kr for today's electricity |
 | Heat price | Current district-heating/heat price in kr/kWh | Approximate kr for afterheat and theoretical value of recovered heat |
 
-Values are leased to the Pi for five minutes and renewed every minute, so stale data disappears on its own when Home Assistant stops. Afterheat and recovered heat are air-side estimates (airflow × temperature rise), not a water-side heat meter; kr values use the current price for the whole day and are marked approximate. See the WebUI's [energy and Home Assistant guide](https://github.com/MRDonnii/dantherm-hch5-control/blob/main/docs/energy-and-ha.da.md) (Danish) for the full setup.
+Values are leased to the Pi for five minutes and renewed every minute, so stale data disappears on its own when Home Assistant stops. Afterheat and recovered heat are air-side estimates (airflow × temperature rise), not a water-side heat meter; kr values use the current price for the whole day and are marked approximate. See the WebUI's [energy and Home Assistant guide](https://github.com/MRDonnii/dantherm-control/blob/main/docs/energy-and-ha.da.md) (Danish) for the full setup.
 
 #### Works together with
 
-- [HCH5 Control WebUI](https://github.com/MRDonnii/dantherm-hch5-control) on the Raspberry Pi: controller, raw TCP stream and the page **Opdateringer**, which links back to this integration and the dashboard card in HACS.
-- [HCH5 Live Card](https://github.com/MRDonnii/ha-smart-home-cards/tree/main/src/cards/ha-hch5-live-card) in Smart Home Cards: [![Open Smart Home Cards in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MRDonnii&repository=ha-smart-home-cards&category=plugin)
+- [Dantherm Control WebUI](https://github.com/MRDonnii/dantherm-control) on the Raspberry Pi: controller, raw TCP stream and the page **Opdateringer**, which links back to this integration and the dashboard card in HACS.
+- [Dantherm Live Card](https://github.com/MRDonnii/ha-smart-home-cards/tree/main/src/cards/ha-hch5-live-card) (`custom:ha-dantherm-live-card`; the old `custom:ha-hch5-live-card` still works) in Smart Home Cards: [![Open Smart Home Cards in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MRDonnii&repository=ha-smart-home-cards&category=plugin)
 
 Smart Auto supports up to 32 rooms, combines HCH5/HAC1's own CO₂/RH with HA sensors, uses the worst relevant measurement rather than an average, supports levels 1–6 and falls back to Local Auto when HA input is stale. `control: false` rooms remain visible for diagnostics but do not steer ventilation. A bypass request is available through the Pi API, while the actual damper position is a separate readback.
 
@@ -91,13 +100,13 @@ A transparent RS485-to-Ethernet adapter is suitable when it can expose the obser
 
 ### Adapter setup
 
-![Passive RS485 wiring diagram](https://raw.githubusercontent.com/MRDonnii/dantherm-hch5-control-ha/main/docs/rs485-wiring.svg)
+![Passive RS485 wiring diagram](https://raw.githubusercontent.com/MRDonnii/dantherm-control-ha/main/docs/rs485-wiring.svg)
 
 #### Wiring the RS485 side
 
 Turn off the ventilation system and adapter while making or changing the
-wiring. Leave the existing HAC1/HCP4-to-HCH connection intact: HCH5 Control is a
-**parallel receive-only tap**, not a replacement controller and not a new bus
+wiring. Leave the existing HAC1/HCP4-to-HCH connection intact: the listener is
+a **parallel receive-only tap**, not a replacement controller and not a new bus
 master.
 
 | Existing RS485 bus | Waveshare / common adapter label | USB-RS485 label |
@@ -139,7 +148,7 @@ A detailed Danish explanation of the findings is available in [docs/findings.da.
 
 ### Raspberry Pi gateway project
 
-For a complete Raspberry Pi OS / Debian / Ubuntu installation with the controller-aware gateway, responsive WebUI, first-user login, history, diagnostics and system administration, use the companion [Dantherm HCH5 Control WebUI repository](https://github.com/MRDonnii/dantherm-hch5-control). Its installer also provides the read-only raw TCP endpoint consumed by this Home Assistant integration.
+For a complete Raspberry Pi OS / Debian / Ubuntu installation with the controller-aware gateway, responsive WebUI, first-user login, history, diagnostics and system administration, use the companion [Dantherm Control WebUI repository](https://github.com/MRDonnii/dantherm-control). Its installer also provides the read-only raw TCP endpoint consumed by this Home Assistant integration.
 
 The [`gateway/`](gateway/) folder is a self-contained, low-cost Raspberry Pi
 project with the receive-only bridge, systemd services, a reusable
@@ -165,9 +174,9 @@ An optional water-preheater extension can read two DS18B20 probes connected to a
 
 Enabling that same extension also creates a separate **Raspberry Pi** device — even without DS18B20 probes attached — reporting the gateway host's own health: CPU temperature, core voltage, load average, memory/disk use, model/kernel version, and undervoltage/throttling/frequency-capping flags (both "right now" and "since the last boot"). This is diagnostic information about the Pi itself, not the Dantherm unit.
 
-Valid heat-recovery measurements are classified as good (85% or higher), acceptable (70–84.9%) or low. HCH5 Control learns a slowly changing local reference and reports the drop as normal, watch (7.5 percentage points) or degraded (12.5 percentage points). Bypass and invalid temperature spans are excluded. Fan-control and RPM deltas are change indicators, not calibrated airflow measurements.
+Valid heat-recovery measurements are classified as good (85% or higher), acceptable (70–84.9%) or low. The integration learns a slowly changing local reference and reports the drop as normal, watch (7.5 percentage points) or degraded (12.5 percentage points). Bypass and invalid temperature spans are excluded. Fan-control and RPM deltas are change indicators, not calibrated airflow measurements.
 
-A "Reset filter interval" button lets you mark the filter as changed from Home Assistant — it only resets the locally tracked cycle and never writes to the bus. If the gateway connection or the HAC1 module stays unreachable for more than 15 minutes, HCH5 Control raises a Home Assistant Repairs issue and clears it automatically once the link recovers.
+A "Reset filter interval" button lets you mark the filter as changed from Home Assistant — it only resets the locally tracked cycle and never writes to the bus. If the gateway connection or the HAC1 module stays unreachable for more than 15 minutes, the integration raises a Home Assistant Repairs issue and clears it automatically once the link recovers.
 
 Up to the latest 20 locally confirmed filter changes are retained. The last change and number of recorded changes are available as diagnostic sensors.
 
@@ -182,7 +191,7 @@ message through a selected `notify.mobile_app_...` service. The warning is sent
 once per filter cycle when the configured remaining-days threshold is reached.
 
 The after-heater thermostat settings are only transmitted when the HCP4 writes
-them. HCH5 Control restores their last observed states after a Home Assistant
+them. The integration restores their last observed states after a Home Assistant
 restart because a passive listener cannot request them again.
 
 The supply-air setpoint is not continuously present on every observed bus.
@@ -202,32 +211,32 @@ source and limitations of every sensor and derived alarm.
 
 ## Installation with HACS
 
-[![Open your Home Assistant instance and add this repository to HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MRDonnii&repository=dantherm-hch5-control-ha&category=integration)
+[![Open your Home Assistant instance and add this repository to HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MRDonnii&repository=dantherm-control-ha&category=integration)
 
-1. Use `https://github.com/MRDonnii/dantherm-hch5-control-ha` as a HACS custom repository.
+1. Use `https://github.com/MRDonnii/dantherm-control-ha` as a HACS custom repository.
 2. In HACS, add that URL as a custom repository of type **Integration**.
-3. Install **Dantherm HCH5 Control** and restart Home Assistant.
+3. Install **Dantherm Control** and restart Home Assistant.
 4. Add the integration under **Settings → Devices & services**.
-5. Enter the IP address and raw TCP listening port configured on the RS485-to-Ethernet adapter.
+5. For an HCH5 MK1 + HAC1, enter the IP address and raw TCP listening port configured on the RS485-to-Ethernet adapter (or the USB-RS485 device path). For a unit with the Dantherm Residential Modbus map, see [Dantherm units over Modbus TCP](#dantherm-units-over-modbus-tcp-beta).
 
 If the adapter address changes later, reconfigure the integration with its new host and port.
 
-To use the controller, open the integration's **Configure** flow after installation, keep **Connect to the Raspberry Pi controller API** on and enter the Pi's address, port `8080` and the controller token. The token is shown on the Pi with `sudo sed -n 's/^DANTHERM_CONTROLLER_TOKEN=//p' /etc/dantherm-passivelink-webui/gateway.env`. A complete step-by-step guide (Danish) is in [Kom godt i gang](https://github.com/MRDonnii/dantherm-hch5-control/blob/main/docs/kom-godt-i-gang.da.md).
+To use the controller, open the integration's **Configure** flow after installation, keep **Connect to the Raspberry Pi controller API** on and enter the Pi's address, port `8080` and the controller token. The token is shown on the Pi with `sudo sed -n 's/^DANTHERM_CONTROLLER_TOKEN=//p' /etc/dantherm-passivelink-webui/gateway.env`. A complete step-by-step guide (Danish) is in [Kom godt i gang](https://github.com/MRDonnii/dantherm-control/blob/main/docs/kom-godt-i-gang.da.md).
 
 ## Compatibility
 
 The RS485 decoder is based on controlled observations from one HCH5 MK1 + HAC1 installation.
 
-### HCH5 MKII (beta)
+### Dantherm units over Modbus TCP (beta)
 
-An HCH5 MKII speaks Modbus itself (the Dantherm Residential register map). Choose **HCH5 MKII – Modbus TCP** when adding the integration and enter the unit's address (or the HCH5 Control Pi's read-only proxy, see the Pi project's README).
+HCH5 MKII, RCV, HCV and HCC units speak Modbus themselves (the Dantherm Residential register map). Choose **Dantherm Modbus TCP (HCH5 MKII, RCV, HCV, HCC)** when adding the integration and enter the address of the unit's Modbus TCP interface (or the Dantherm Control Pi's read-only proxy, see the Pi project's README). The model is read from the unit (e.g. *HCH 5 MKII*, *RCV320 P2*, *HCV400 P2*) and names the device; a type not in the list shows as *Dantherm type N*.
 
 - Readings: temperatures T1–T5, fan speeds, step, operation mode, bypass, humidity, air quality, filter days and alarm.
 - Connected directly (no Pi controller): **Operation mode** (standby, manual, automatic, week program, away, summer, fireplace), **Fan step** 0–4, **Bypass (manual)**, **Reset filter** and **Reset alarm**.
 - **Bypass (manual)** shows whether manual bypass is selected on the unit, so it switches at once; the damper needs a minute or two to travel, and its position (`closed`, `opening`, `open`, `closing`) is in the switch's `damper` attribute. *Bypass active* still shows the damper itself (0.9.0-beta.2).
-- With the HCH5 Control Pi: the controls come from the Pi as on an MK1.
-- MK1-only values (afterheat, HAC1, CO₂) are not created on an MKII.
+- With the Dantherm Control Pi: the controls come from the Pi as on an MK1.
+- MK1-only values (afterheat, HAC1, CO₂) are not created on a Modbus unit.
 
-MKII support is tested against a simulator of the register map, not yet on a real MKII. The register map follows [Tvalley71/dantherm](https://github.com/Tvalley71/dantherm) (Apache License 2.0); see [NOTICE](NOTICE).
+Modbus support is tested against a simulator of the register map, not yet on a real HCH5 MKII; the other models share the register map, but not every model has every component. The register map and model names follow [Tvalley71/dantherm](https://github.com/Tvalley71/dantherm) (Apache License 2.0); see [NOTICE](NOTICE).
 
 Dantherm Group has not supplied this integration and provides no support or warranty for it.

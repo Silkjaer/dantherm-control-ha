@@ -1,4 +1,4 @@
-"""Diagnostics for HCH5 Control."""
+"""Diagnostics for Dantherm Control."""
 
 from homeassistant.components.diagnostics import async_redact_data
 

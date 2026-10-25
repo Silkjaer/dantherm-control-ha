@@ -79,7 +79,7 @@ class SmartPassiveLinkCoordinator(PassiveLinkCoordinator):
         known = getattr(self, "_alarm_codes", set())
         for code in active.keys() - known:
             persistent_notification.async_create(
-                self.hass, active[code], title="Ventilation (HCH5)",
+                self.hass, active[code], title="Ventilation",
                 notification_id=f"hch5_diagnostics_{code}",
             )
         for code in known - active.keys():
