@@ -90,7 +90,7 @@ def _bypass_commands(sim):
 @pytest.fixture
 def sim_travel(sim_tcp):
     sim, unit = sim_tcp
-    sim.bypass_travel_reads = 3  # the damper reports OPENING/CLOSING for three reads
+    sim.bypass_travel_ticks = 3  # the damper reports OPENING/CLOSING until three ticks have passed
     return sim, unit
 
 
@@ -101,8 +101,10 @@ def test_bypass_on_shows_selected_while_the_damper_opens(sim_travel):
     data = unit.snapshot()
     assert data["manual_bypass"] is True and data["bypass_state"] == "opening"
     assert data["bypass_raw"] == mk2.BYPASS_OPENING and data["bypass_active"] is True
-    for _ in range(3):
-        data = unit.snapshot()
+    sim.tick(2)
+    assert unit.snapshot()["bypass_state"] == "opening"
+    sim.tick()
+    data = unit.snapshot()
     assert data["bypass_state"] == "open" and data["manual_bypass"] is True
     assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN]
 
@@ -115,11 +117,15 @@ def test_bypass_off_while_opening_deselects_at_once(sim_travel):
     data = unit.snapshot()
     assert data["manual_bypass"] is False  # off at once, although the damper is still travelling
     assert data["bypass_state"] == "opening" and data["bypass_active"] is True
-    unit.set_bypass(False)  # already deselected: nothing more is sent
+    unit.set_bypass(False)  # already deselected, though the damper still opens: nothing more is sent
     assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN, mk2.CMD_BYPASS_CLOSE]
-    states = [unit.snapshot()["bypass_state"] for _ in range(10)]
-    assert "closing" in states and states[-1] == "closed"
+    sim.tick(3)  # the damper finishes opening first, then closes
     data = unit.snapshot()
+    assert data["bypass_state"] == "closing" and data["manual_bypass"] is False
+    unit.set_bypass(False)
+    sim.tick(3)
+    data = unit.snapshot()
+    assert data["bypass_state"] == "closed"
     assert data["bypass_active"] is False and data["manual_bypass"] is False
     assert _bypass_commands(sim).count(mk2.CMD_BYPASS_CLOSE) == 1
 
@@ -154,6 +160,30 @@ def test_bypass_falls_back_to_the_damper_without_active_mode(sim_tcp):
     unit.set_bypass(False)
     assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN, mk2.CMD_BYPASS_CLOSE]
     assert unit.snapshot()["bypass_active"] is False
+    # "In progress" has no known direction: both commands are sent (they are idempotent).
+    sim.writes.clear()
+    sim.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_IN_PROGRESS)
+    unit.set_bypass(True)
+    sim.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_IN_PROGRESS)
+    unit.set_bypass(False)
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN, mk2.CMD_BYPASS_CLOSE]
+
+
+def test_bypass_lost_answer_is_not_mistaken_for_an_old_unit(sim_travel):
+    sim, unit = sim_travel
+    unit.set_bypass(True)
+    unit.set_bypass(False)
+    sim.dropping_registers.add(mk2.REG_ACTIVE_MODE)
+    data = unit.snapshot()
+    # The last selection stands; no fallback to the still-opening damper.
+    assert data["manual_bypass"] is False and data["bypass_state"] == "opening"
+    with pytest.raises(mk2.ModbusError):
+        unit.set_bypass(True)  # no guessing from the damper when the unit does not answer
+    assert _bypass_commands(sim) == [mk2.CMD_BYPASS_OPEN, mk2.CMD_BYPASS_CLOSE]
+    sim.dropping_registers.clear()
+    unit.set_bypass(True)
+    assert unit.snapshot()["manual_bypass"] is True
+    assert _bypass_commands(sim)[-1] == mk2.CMD_BYPASS_OPEN
 
 
 def test_bypass_raw_and_active_keep_their_meaning(sim_tcp):
@@ -206,3 +236,66 @@ def test_level_from_percent_follows_controller_steps():
     assert mk2.level_from_percent(100, steps) == 4
     assert mk2.level_from_percent(52, steps) in (2, 3)
     assert mk2.level_from_percent(60, []) == 2
+
+
+def _load_client_module():
+    """client.py without Home Assistant: load the package directory under a stand-in name."""
+    import importlib
+    import types
+
+    name = "_hch_passivelink_light"
+    if name not in sys.modules:
+        package = types.ModuleType(name)
+        package.__path__ = [str(Path(__file__).parents[1] / "custom_components" / "hch_passivelink")]
+        sys.modules[name] = package
+    return importlib.import_module(f"{name}.client")
+
+
+def test_command_during_a_poll_triggers_another_read():
+    """A command landing while a poll is being read must not wait for the next interval."""
+    import asyncio
+    import threading
+
+    client_module = _load_client_module()
+
+    class SlowUnit:
+        def __init__(self) -> None:
+            self.reads = 0
+            self.reading = threading.Event()
+            self.release = threading.Event()
+
+        def snapshot(self):
+            self.reads += 1
+            if self.reads == 1:
+                self.reading.set()
+                self.release.wait(5)  # the first poll is still reading when the command arrives
+            return {"reads": self.reads}
+
+        def set_bypass(self, open_):
+            pass
+
+    async def scenario() -> list[int]:
+        published: list[int] = []
+        second = asyncio.Event()
+
+        def update(data):
+            published.append(data["reads"])
+            if data["reads"] >= 2:
+                second.set()
+
+        client = client_module.Mk2Client("127.0.0.1", 502, 1, update)
+        client.POLL_SECONDS = 60
+        unit = client.unit = SlowUnit()
+        task = asyncio.create_task(client.run())
+        await asyncio.to_thread(unit.reading.wait, 5)
+        await client.async_command("set_bypass", False)
+        unit.release.set()
+        try:
+            await asyncio.wait_for(second.wait(), timeout=3)
+        finally:
+            client._stopped = True
+            client._wake.set()
+            await asyncio.wait_for(task, timeout=5)
+        return published
+
+    assert asyncio.run(scenario())[:2] == [1, 2]

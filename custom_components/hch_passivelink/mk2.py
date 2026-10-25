@@ -174,6 +174,14 @@ class ModbusError(OSError):
     """The unit did not answer, or answered with an exception."""
 
 
+class ModbusExceptionResponse(ModbusError):
+    """The unit answered with a Modbus exception (e.g. illegal address).
+
+    The unit is there; it just does not support the request. Timeouts, dropped
+    connections and CRC errors stay plain ``ModbusError``.
+    """
+
+
 class Transport(Protocol):
     def read(self, address: int, count: int) -> list[int]: ...
     def write(self, address: int, values: list[int]) -> None: ...
@@ -194,7 +202,7 @@ def _parse_pdu(pdu: bytes, function: int, count: int = 0) -> list[int]:
     if not pdu:
         raise ModbusError("empty response")
     if pdu[0] == function | 0x80:
-        raise ModbusError(f"Modbus exception {pdu[1] if len(pdu) > 1 else '?'}")
+        raise ModbusExceptionResponse(f"Modbus exception {pdu[1] if len(pdu) > 1 else '?'}")
     if pdu[0] != function:
         raise ModbusError(f"unexpected function {pdu[0]}")
     if function == 3:
@@ -325,6 +333,9 @@ class Mk2Unit:
     def __init__(self, transport: Transport) -> None:
         self.transport = transport
         self.info: Mk2Info | None = None
+        self._manual_bypass: bool | None = None  # last manual-bypass bit read (None: not supported)
+        # Commands that read before they write must not interleave (e.g. two quick bypass presses).
+        self._command_lock = threading.Lock()
 
     # reading
     def _u32(self, address: int) -> int:
@@ -395,10 +406,9 @@ class Mk2Unit:
             pass
         if info.has_bypass or info.components == 0:
             # Whether manual bypass is selected changes at once; the damper takes minutes to follow.
-            try:
-                data["manual_bypass"] = bool(self._u32(REG_ACTIVE_MODE) & ACTIVE_MANUAL_BYPASS)
-            except ModbusError:
-                pass
+            manual = self._read_manual_bypass()
+            if manual is not None:
+                data["manual_bypass"] = manual
         if info.has_humidity or info.components == 0:
             data["relative_humidity"] = self._u32(REG_HUMIDITY)
         if info.has_air_quality or info.components == 0:
@@ -411,6 +421,20 @@ class Mk2Unit:
             data["air_quality_index"] = "good" if quality < middle else "moderate" if quality < high else "poor"
         return data
 
+    def _read_manual_bypass(self) -> bool | None:
+        """Bit 0x0080 of the active mode; None when the unit does not have that register.
+
+        After a lost answer (timeout, dropped connection) the last value read stands,
+        so one bad read does not make the bypass switch flicker.
+        """
+        try:
+            self._manual_bypass = bool(self._u32(REG_ACTIVE_MODE) & ACTIVE_MANUAL_BYPASS)
+        except ModbusExceptionResponse:
+            self._manual_bypass = None
+        except ModbusError:
+            pass
+        return self._manual_bypass
+
     # commands
     def command(self, value: int) -> None:
         self.transport.write(REG_ACTIVE_MODE, u32_to_regs(value))
@@ -418,12 +442,12 @@ class Mk2Unit:
     def set_level(self, level: int) -> None:
         """0 = standby, 1..4 = fan step; switches the unit to manual first."""
         level = max(0, min(4, int(level)))
-        if self._u32(REG_CURRENT_MODE) not in (MODE_MANUAL, MODE_STANDBY):
-            self.command(CMD_MANUAL)
-        self.transport.write(REG_FAN_LEVEL, u32_to_regs(level))
+        with self._command_lock:
+            if self._u32(REG_CURRENT_MODE) not in (MODE_MANUAL, MODE_STANDBY):
+                self.command(CMD_MANUAL)
+            self.transport.write(REG_FAN_LEVEL, u32_to_regs(level))
 
     def set_operation(self, name: str) -> None:
-        current = self._u32(REG_CURRENT_MODE)
         ends = {MODE_AWAY: CMD_END_AWAY, MODE_FIREPLACE: CMD_END_FIREPLACE, MODE_SUMMER: CMD_END_SUMMER}
         target = {
             "manual": CMD_MANUAL, "standby": CMD_MANUAL, "automatic": CMD_AUTOMATIC,
@@ -432,11 +456,13 @@ class Mk2Unit:
         }
         if name not in target:
             raise ValueError(f"unknown operation {name}")
-        if current in ends and MODE_NAMES.get(current) != name:
-            self.command(ends[current])
-        self.command(target[name])
-        if name == "standby":
-            self.transport.write(REG_FAN_LEVEL, u32_to_regs(0))
+        with self._command_lock:
+            current = self._u32(REG_CURRENT_MODE)
+            if current in ends and MODE_NAMES.get(current) != name:
+                self.command(ends[current])
+            self.command(target[name])
+            if name == "standby":
+                self.transport.write(REG_FAN_LEVEL, u32_to_regs(0))
 
     def set_fireplace(self, on: bool) -> None:
         self.command(CMD_START_FIREPLACE if on else CMD_END_FIREPLACE)
@@ -452,22 +478,31 @@ class Mk2Unit:
 
         Decided by the manual-bypass bit of the active mode (as Tvalley71/dantherm
         does), not by the damper, which needs a minute or two to travel. Units that
-        do not answer that register fall back to the damper position.
+        answer that register with a Modbus exception fall back to the damper position
+        (the same rule as ``bypass_active``); a damper "in progress" has no known
+        direction, so the command is sent. Select/deselect are idempotent on the unit.
+        A lost answer (timeout) raises instead of guessing.
         """
-        try:
-            selected = bool(self._u32(REG_ACTIVE_MODE) & ACTIVE_MANUAL_BYPASS)
-        except ModbusError:
-            state = self._u32(REG_BYPASS_DAMPER)
-            selected = state in (BYPASS_OPENED, BYPASS_OPENING, BYPASS_IN_PROGRESS)
-        if open_ != selected:
-            self.command(CMD_BYPASS_OPEN if open_ else CMD_BYPASS_CLOSE)
+        with self._command_lock:
+            try:
+                selected: bool | None = bool(self._u32(REG_ACTIVE_MODE) & ACTIVE_MANUAL_BYPASS)
+                self._manual_bypass = selected
+            except ModbusExceptionResponse:
+                self._manual_bypass = None
+                state = self._u32(REG_BYPASS_DAMPER)
+                selected = None if state == BYPASS_IN_PROGRESS else state in (BYPASS_OPENED, BYPASS_OPENING)
+            if open_ != selected:
+                self.command(CMD_BYPASS_OPEN if open_ else CMD_BYPASS_CLOSE)
+                if self._manual_bypass is not None:
+                    self._manual_bypass = open_  # what a read lost to a timeout should show
 
     def reset_filter(self) -> None:
         self.transport.write(REG_FILTER_RESET, u32_to_regs(1))
 
     def reset_alarm(self) -> None:
-        alarm = self._u32(REG_ALARM)
-        self.transport.write(REG_ALARM_RESET, u32_to_regs(alarm or 1))
+        with self._command_lock:
+            alarm = self._u32(REG_ALARM)
+            self.transport.write(REG_ALARM_RESET, u32_to_regs(alarm or 1))
 
     def set_week_program(self, program: int) -> None:
         self.transport.write(REG_WEEK_PROGRAM, u32_to_regs(int(program)))

@@ -197,6 +197,9 @@ class Mk2Client:
     async def run(self) -> None:
         delay = self.POLL_SECONDS
         while not self._stopped:
+            # Clear before reading: a command sent while this poll runs must trigger
+            # another read, or its result shows up only a full poll interval later.
+            self._wake.clear()
             try:
                 data = await asyncio.to_thread(self.unit.snapshot)
                 self.connected, delay = True, self.POLL_SECONDS
@@ -207,7 +210,6 @@ class Mk2Client:
                 _LOGGER.debug("MKII poll failed: %s", err)
                 delay = min(delay * 2, 60)
             self._update(dict(self.data))
-            self._wake.clear()
             try:
                 await asyncio.wait_for(self._wake.wait(), timeout=delay)
             except asyncio.TimeoutError:

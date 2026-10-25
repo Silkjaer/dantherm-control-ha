@@ -89,7 +89,7 @@ async def test_mk2_setup_entities_and_controls(hass, sim):
     assert hass.states.get(operation).state == "manual"
 
     # The switch follows the manual-bypass selection at once; the damper takes minutes to travel.
-    sim.bypass_travel_reads = 1000
+    sim.bypass_travel_ticks = 1000  # never arrives during the test
     bypass = _entity(hass, "switch", "mk2_bypass")
     await hass.services.async_call("switch", "turn_on", {"entity_id": bypass}, blocking=True)
     await _until(hass, lambda: hass.states.get(bypass).state == "on")

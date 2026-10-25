@@ -3,9 +3,9 @@
 Used by the tests; not shipped. Behaviour follows the Dantherm Residential
 register map: writes to the active-mode register change the current mode,
 the active-mode register reads back as a bitmask (bit 0x0080 = manual bypass
-selected), selecting manual bypass moves the damper (optionally over several
-reads, like the real damper's travel), the fan level sets the step, filter and
-alarm resets clear their counters.
+selected), selecting manual bypass moves the damper (at once, or over a number
+of ``tick()`` calls like the real damper's minute-or-two travel), the fan level
+sets the step, filter and alarm resets clear their counters.
 """
 
 from __future__ import annotations
@@ -18,14 +18,16 @@ import mk2
 
 
 class Mk2Simulator:
-    def __init__(self, bypass_travel_reads: int = 0) -> None:
+    def __init__(self, bypass_travel_ticks: int = 0) -> None:
         self.regs: dict[int, int] = {}
         self.lock = threading.Lock()
         self.writes: list[tuple[int, list[int]]] = []
         self._previous_mode = mk2.MODE_AUTOMATIC
-        # Damper reads spent OPENING/CLOSING before it arrives (0 = it moves at once).
-        self.bypass_travel_reads = bypass_travel_reads
+        # tick() calls the damper spends OPENING/CLOSING before it arrives (0 = it moves at once).
+        # Counted in ticks, not reads, so how often the code reads does not change the travel.
+        self.bypass_travel_ticks = bypass_travel_ticks
         self.failing_registers: set[int] = set()  # reads answer with a Modbus exception
+        self.dropping_registers: set[int] = set()  # reads get no answer: the connection is dropped
         self._travel_left: int | None = None  # None: no simulated travel under way
         self._damper_next: int | None = None  # where the damper goes after the current travel
         self.set_u32(mk2.REG_SYSTEM_ID, mk2.DEVICE_TYPE_HCH5_MK2 << 24 | 0x0105)
@@ -69,8 +71,6 @@ class Mk2Simulator:
         with self.lock:
             if address not in self.regs or address in self.failing_registers:
                 return None  # illegal address
-            if address == mk2.REG_BYPASS_DAMPER:
-                self._advance_damper()
             return [self.regs.get(address + i, 0) for i in range(count)]
 
     def write(self, address: int, values: list[int]) -> None:
@@ -120,7 +120,7 @@ class Mk2Simulator:
     # bypass damper travel
     def _move_damper(self, target: int) -> None:
         state = self.u32(mk2.REG_BYPASS_DAMPER)
-        if self.bypass_travel_reads <= 0:
+        if self.bypass_travel_ticks <= 0:
             self._travel_left, self._damper_next = None, None
             self.set_u32(mk2.REG_BYPASS_DAMPER, target)
         elif self._travel_left is not None:
@@ -133,14 +133,20 @@ class Mk2Simulator:
     def _start_travel(self, target: int) -> None:
         moving = mk2.BYPASS_OPENING if target == mk2.BYPASS_OPENED else mk2.BYPASS_CLOSING
         self.set_u32(mk2.REG_BYPASS_DAMPER, moving)
-        self._travel_left = self.bypass_travel_reads
+        self._travel_left = self.bypass_travel_ticks
+
+    def tick(self, count: int = 1) -> None:
+        """Let time pass: each tick is one step of the damper's travel."""
+        with self.lock:
+            for _ in range(count):
+                self._advance_damper()
 
     def _advance_damper(self) -> None:
-        """One damper read: count down the travel, then arrive (and start any queued travel)."""
+        """Count down the travel, then arrive (and start any queued travel)."""
         if self._travel_left is None:
             return
+        self._travel_left -= 1
         if self._travel_left > 0:
-            self._travel_left -= 1
             return
         state = self.u32(mk2.REG_BYPASS_DAMPER)
         self.set_u32(mk2.REG_BYPASS_DAMPER, mk2.BYPASS_OPENED if state == mk2.BYPASS_OPENING else mk2.BYPASS_CLOSED)
@@ -152,9 +158,12 @@ class Mk2Simulator:
 
     # Modbus PDU handling
     def handle_pdu(self, pdu: bytes) -> bytes:
+        """The reply PDU; empty when the request gets no answer (see dropping_registers)."""
         function = pdu[0]
         if function == 3:
             address, count = struct.unpack(">HH", pdu[1:5])
+            if address in self.dropping_registers:
+                return b""
             regs = self.read(address, count)
             if regs is None:
                 return bytes([0x83, 2])
@@ -179,6 +188,8 @@ class Mk2Simulator:
                     tid, proto, length, unit = struct.unpack(">HHHB", header)
                     pdu = self.request.recv(length - 1)
                     reply = sim.handle_pdu(pdu)
+                    if not reply:
+                        return  # no answer: the connection is closed
                     self.request.sendall(struct.pack(">HHHB", tid, proto, len(reply) + 1, unit) + reply)
 
         server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
@@ -202,7 +213,10 @@ class FakeSerial:
         assert crc == mk2.crc16(body), "bad CRC from master"
         if body[0] != self.unit_id:
             return len(frame)
-        reply = bytes([self.unit_id]) + self.sim.handle_pdu(body[1:])
+        pdu = self.sim.handle_pdu(body[1:])
+        if not pdu:
+            return len(frame)
+        reply = bytes([self.unit_id]) + pdu
         self._rx = reply + struct.pack("<H", mk2.crc16(reply))
         return len(frame)
 
