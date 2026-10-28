@@ -77,6 +77,9 @@ class PassiveLinkCoordinator(DataUpdateCoordinator[dict[str, object]]):
         self._pending_temperature_sample = None
         self._disconnected_since: float | None = None
         self._hac1_lost_since: float | None = None
+        # Whether a HAC1 has ever reported itself connected. Kept across
+        # restarts: a unit that never had one must not raise "HAC1 lost".
+        self.hac1_seen = False
         self._efficiency_reference: float | None = None
         self._filter_reset_history: list[float] = []
 
@@ -88,6 +91,8 @@ class PassiveLinkCoordinator(DataUpdateCoordinator[dict[str, object]]):
             interval = stored.get("interval_days")
             notified_reset = stored.get("notification_reset_epoch")
             night_mode = stored.get("night_mode")
+            if stored.get("hac1_seen") is True:
+                self.hac1_seen = True
             efficiency_reference = stored.get("efficiency_reference")
             reset_history = stored.get("filter_reset_history")
             if isinstance(night_mode, bool):
@@ -256,7 +261,9 @@ class PassiveLinkCoordinator(DataUpdateCoordinator[dict[str, object]]):
                     translation_key=ISSUE_CONNECTION_LOST,
                 )
         hac1_connected = self.data.get("hac1_connected")
-        if not connected or hac1_connected is not False:
+        # Only a HAC1 that was there can be lost; HCP4 also reports "not
+        # connected" (register 146 = 0) on units that never had one.
+        if not connected or hac1_connected is not False or not self.hac1_seen:
             self._hac1_lost_since = None
             ir.async_delete_issue(self.hass, DOMAIN, ISSUE_HAC1_DISCONNECTED)
         else:
@@ -283,6 +290,8 @@ class PassiveLinkCoordinator(DataUpdateCoordinator[dict[str, object]]):
             data["efficiency_reference"] = self._efficiency_reference
         if self._filter_reset_history:
             data["filter_reset_history"] = self._filter_reset_history[-20:]
+        if self.hac1_seen:
+            data["hac1_seen"] = True
         if data:
             await self._filter_store.async_save(data)
 
@@ -306,6 +315,9 @@ class PassiveLinkCoordinator(DataUpdateCoordinator[dict[str, object]]):
                 else:
                     data.pop(key, None)
         self._sync_unit_filter(data)
+        if data.get("hac1_connected") is True and not self.hac1_seen:
+            self.hac1_seen = True
+            self.hass.async_create_task(self._async_save_filter_state())
         interval = data.get("filter_interval_days")
         night_mode = data.get("night_mode")
         if isinstance(night_mode, bool) and night_mode != self._night_mode:

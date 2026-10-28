@@ -69,6 +69,14 @@ ALARM_KEYS = {
     "exhaust_temperature_sensor_fault", "room_temperature_sensor_fault",
     "outdoor_temperature_low", "supply_temperature_low", "fire_temperature_alarm",
 }
+# Values that only a HAC1 module produces. On a unit without HAC1 they would
+# sit unavailable for ever, so they are created once a HAC1 has been seen.
+HAC1_KEYS = (AFTERHEAT_KEYS - {"afterheat_raw"}) | {
+    "co2",
+    "air_quality",
+    "air_quality_index",
+    "hac1_connected",
+}
 # Values that only exist once an HCP4/HRC2 panel has written on the bus. With the
 # Pi as master and no panel, nothing ever produces them, so they are created when
 # the first value arrives instead of sitting unavailable from the start.
@@ -161,10 +169,14 @@ class PassiveLinkEntity(CoordinatorEntity[PassiveLinkCoordinator]):
     @property
     def defer_until_data(self) -> bool:
         """Whether the entity is created only when its first value arrives."""
+        if self.key in HAC1_KEYS and not getattr(self.coordinator, "hac1_seen", True):
+            return True
         return self.key in HCP4_KEYS and getattr(self.coordinator, "controller_client", None) is not None
 
     @property
     def has_data(self) -> bool:
+        if self.key in HAC1_KEYS and not getattr(self.coordinator, "hac1_seen", True):
+            return False
         return self.coordinator.data.get(self.key) is not None
 
 

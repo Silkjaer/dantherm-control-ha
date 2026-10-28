@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components"))
 pytest.importorskip("homeassistant")
 pytest.importorskip("serial")
 from hch_passivelink import binary_sensor, sensor  # noqa: E402
-from hch_passivelink.entity import HCP4_KEYS, OPTIONAL_CONTROLLER_KEYS  # noqa: E402
+from hch_passivelink.entity import HAC1_KEYS, HCP4_KEYS, OPTIONAL_CONTROLLER_KEYS  # noqa: E402
 
 PASSIVE_SENSOR_KEYS = {
     "extract_fan_percent", "supply_fan_percent", "fan_control_delta",
@@ -20,8 +20,10 @@ PASSIVE_BINARY_KEYS = {"fireplace", "standby"}
 
 
 class Coordinator:
-    def __init__(self, *, controller: bool = True):
+    def __init__(self, *, controller: bool = True, hac1_seen: bool = True):
         self.available = True
+        self.hac1_seen = hac1_seen
+        self.client = None  # an MK1 bus client; mk2_entities checks its type
         self.data = {}
         self.controller_state = {}
         self.controller_client = SimpleNamespace(connected=True) if controller else None
@@ -167,3 +169,29 @@ def test_hcp4_key_sets_match_the_declared_descriptions():
     described |= {description.key for description in binary_sensor.DESCRIPTIONS}
     assert HCP4_KEYS <= described
     assert OPTIONAL_CONTROLLER_KEYS <= {spec[0] for spec in sensor.CONTROLLER_SENSOR_SPECS}
+
+
+def test_hac1_entities_are_not_created_on_a_unit_without_hac1():
+    # HCP4 reports register 146 = 0 on a unit without HAC1.
+    coordinator = Coordinator(controller=False, hac1_seen=False)
+    sensors, _ = setup_platform(sensor, coordinator)
+    binaries, _ = setup_platform(binary_sensor, coordinator)
+    created = set(keys(sensors)) | set(keys(binaries))
+    assert not HAC1_KEYS & created
+    assert {"outdoor_temperature", "room_temperature", "relative_humidity"} <= created
+
+    coordinator.publish(hac1_connected=False, room_temperature=26.6)
+    created = set(keys(sensors)) | set(keys(binaries))
+    assert not HAC1_KEYS & created
+
+
+def test_hac1_entities_appear_once_a_hac1_is_seen():
+    coordinator = Coordinator(controller=False, hac1_seen=False)
+    sensors, _ = setup_platform(sensor, coordinator)
+    binaries, _ = setup_platform(binary_sensor, coordinator)
+
+    coordinator.hac1_seen = True
+    coordinator.publish(hac1_connected=True, co2=650, air_quality_index="good")
+    created = keys(sensors) + keys(binaries)
+    assert {"co2", "air_quality_index", "hac1_connected"} <= set(created)
+    assert len(created) == len(set(created))
