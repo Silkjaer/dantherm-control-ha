@@ -206,10 +206,34 @@ def test_afterheat_thermostat_waits_for_a_hac1():
     assert keys(batches) == []
 
     coordinator.hac1_seen = True
-    coordinator.publish(hac1_connected=True)
+    coordinator.publish_controller(afterheat_setpoint=20)
     assert keys(batches) == ["afterheat_setpoint"]
 
 
 def test_afterheat_thermostat_is_created_at_once_with_a_known_hac1():
-    batches, _ = setup_platform(climate, Coordinator())
+    coordinator = Coordinator()
+    coordinator.controller_state = {"afterheat_setpoint": 20}
+    batches, _ = setup_platform(climate, coordinator)
     assert keys(batches) == ["afterheat_setpoint"]
+
+
+CONTROLLER_AFTERHEAT_SENSORS = {
+    "actual_afterheat_setpoint", "actual_afterheat_selection", "afterheat_lift", "afterheat_power_w",
+    "afterheat_energy_today_kwh", "actual_afterheat_frost_temperature", "actual_afterheat_outdoor_lockout",
+}
+
+
+def test_controller_afterheat_sensors_wait_for_a_hac1():
+    coordinator = Coordinator(hac1_seen=False)
+    values = {key: 1 for key in CONTROLLER_AFTERHEAT_SENSORS | {"actual_afterheat", "afterheat_energy_kwh"}}
+    coordinator.controller_state = dict(values)
+    sensors, _ = setup_platform(sensor, coordinator)
+    binaries, _ = setup_platform(binary_sensor, coordinator)
+    created = set(keys(sensors)) | set(keys(binaries))
+    assert not (CONTROLLER_AFTERHEAT_SENSORS | {"actual_afterheat", "afterheat_energy_kwh"}) & created
+    assert "effective_level" in created
+
+    coordinator.hac1_seen = True
+    coordinator.publish_controller(**values)
+    created = set(keys(sensors)) | set(keys(binaries))
+    assert CONTROLLER_AFTERHEAT_SENSORS | {"actual_afterheat", "afterheat_energy_kwh"} <= created

@@ -5,7 +5,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONTROLLER_DEVICE_NAME, DOMAIN
-from .entity import OPTIONAL_CONTROLLER_KEYS, parent_link
+from .entity import CONTROLLER_HAC1_KEYS, OPTIONAL_CONTROLLER_KEYS, parent_link
 
 
 class ControllerEntity(CoordinatorEntity):
@@ -44,12 +44,18 @@ class ControllerEntity(CoordinatorEntity):
         return self.coordinator.controller_state.get(self.key)
 
     @property
+    def _waiting_for_hac1(self) -> bool:
+        return self.key in CONTROLLER_HAC1_KEYS and not getattr(self.coordinator, "hac1_seen", True)
+
+    @property
     def defer_until_data(self) -> bool:
         """Whether the entity is created only when the Pi first reports a value."""
-        return self.key in OPTIONAL_CONTROLLER_KEYS
+        return self._waiting_for_hac1 or self.key in OPTIONAL_CONTROLLER_KEYS
 
     @property
     def has_data(self) -> bool:
+        if self._waiting_for_hac1:
+            return False
         return self.controller_value is not None
 
     async def async_command(self, patch: dict[str, object]) -> None:
