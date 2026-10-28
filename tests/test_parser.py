@@ -163,6 +163,37 @@ def test_optional_afterheat_off_states_from_periodic_read():
     assert decoder.data["afterheat_extract_setpoint"] == "off"
 
 
+def test_hcp4_temperature_block_without_hac1_gives_room_temperature():
+    # Captured from an HCH5 MK1 without HAC1: T1..T5 in hundredths, T5 from
+    # the HRC2 remote (26.60 °C on its display).
+    decoder = DanthermDecoder(lambda _: None)
+    body = bytes.fromhex("401000b400050a050505690ab70a070a64")
+    decoder.decode(frame(body))
+    assert decoder.data["room_temperature"] == 26.6
+    assert decoder.data["room_sensor_missing"] is False
+    assert "afterheat_room_setpoint" not in decoder.data
+    assert "afterheat_extract_setpoint" not in decoder.data
+
+
+def test_hcp4_temperature_block_in_winter_still_gives_room_temperature():
+    # Exhaust air (T4) can drop below 5 °C, extract air (T3) cannot.
+    decoder = DanthermDecoder(lambda _: None)
+    words = (0xFC18, 1650, 2150, 180, 2190)  # -10.00, 16.50, 21.50, 1.80, 21.90
+    decoder.decode(frame(bytes.fromhex("401000b400050a") + b"".join(w.to_bytes(2, "big") for w in words)))
+    assert decoder.data["room_temperature"] == 21.9
+
+
+def test_hcp4_temperature_block_without_hrc2_is_not_a_room_temperature():
+    from alarms import derive_alarm_values
+
+    decoder = DanthermDecoder(lambda _: None)
+    words = (1285, 1385, 2743, 2567, 0)
+    decoder.decode(frame(bytes.fromhex("401000b400050a") + b"".join(w.to_bytes(2, "big") for w in words)))
+    assert decoder.data.get("room_temperature") is None
+    assert decoder.data["room_sensor_missing"] is True
+    assert derive_alarm_values(decoder.data)["room_temperature_sensor_fault"] is False
+
+
 def test_supply_air_setpoint_from_hac1_write_block():
     decoder = DanthermDecoder(lambda _: None)
     body = bytes.fromhex("401000b900050aff011600000f18fee201")

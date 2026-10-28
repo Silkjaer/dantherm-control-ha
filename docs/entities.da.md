@@ -12,7 +12,7 @@ Modbus-forespørgsler eller kommandoer.
 | Indblæsningstemperatur (T2) | Luft sendt ind i huset. |
 | Udsugningstemperatur (T3) | Luft fra huset til anlægget. |
 | Afkasttemperatur (T4) | Luft, der forlader anlægget efter varmegenvinding. |
-| Hustemperatur (T5) | HRC2-rumføleren fra HAC1-snapshot 180-209. |
+| Hustemperatur (T5) | HRC2-rumføleren fra HAC1-snapshot 180-209. Uden HAC1 læses den fra HCP4's skrivning af T1-T5 til register 180-184. |
 | Relativ luftfugtighed | Beregnet fra HRC2-rådata med rumtemperaturkompensation. Det er ikke PC Tools byte-skalerede værdi og er ikke laboratoriekalibreret. |
 | CO2 | CO2-koncentration fra HAC1, i ppm. |
 | Luftkvalitet | Afledt af CO2: god under 800 ppm, moderat 800-1200 ppm og dårlig over 1200 ppm. |
