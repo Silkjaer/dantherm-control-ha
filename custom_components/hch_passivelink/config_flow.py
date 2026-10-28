@@ -200,6 +200,7 @@ class PassiveLinkOptionsFlow(config_entries.OptionsFlow):
         self._selected_room: int | None = None
         self._controller_client: ControllerApiClient | None = None
         self._controller_state: dict[str, object] = {}
+        self._controller_error: str | None = None
 
     @property
     def _current(self) -> dict:
@@ -330,7 +331,44 @@ class PassiveLinkOptionsFlow(config_entries.OptionsFlow):
         room.update({key: value for key, value in sensors.items() if value})
         return room, errors
 
+    def _controller_configured(self) -> bool:
+        current = self._current
+        return bool(
+            current.get(CONF_CONTROLLER_API_ENABLED, True)
+            and current.get(CONF_CONTROLLER_HOST)
+            and current.get(CONF_CONTROLLER_TOKEN)
+        )
+
     async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
+        """Start at a menu, so rooms and controller settings are one step away."""
+        del user_input
+        self._pending = dict(self._current)
+        options = ["connection", "controller"]
+        if self._controller_configured():
+            options.insert(0, "controller_quick")
+        return self.async_show_menu(step_id="init", menu_options=options)
+
+    async def async_step_controller_quick(self, user_input: dict | None = None) -> FlowResult:
+        """Open the controller menu with the saved API address and key."""
+        del user_input
+        current = self._current
+        client = ControllerApiClient(
+            async_get_clientsession(self.hass),
+            str(current[CONF_CONTROLLER_HOST]),
+            int(current.get(CONF_CONTROLLER_PORT, DEFAULT_CONTROLLER_PORT)),
+            str(current[CONF_CONTROLLER_TOKEN]),
+            lambda _: None,
+        )
+        try:
+            self._controller_state = await client.async_probe()
+        except (OSError, ConnectionError, asyncio.TimeoutError):
+            # Show the API page with the error, so the address or key can be fixed.
+            self._controller_error = "controller_cannot_connect"
+            return await self.async_step_controller()
+        self._controller_client = client
+        return await self.async_step_controller_menu()
+
+    async def async_step_connection(self, user_input: dict | None = None) -> FlowResult:
         current = self._current
         errors = {}
         if user_input is not None:
@@ -425,11 +463,12 @@ class PassiveLinkOptionsFlow(config_entries.OptionsFlow):
                 default=current.get(CONF_CONTROLLER_API_ENABLED, True),
             ): bool,
         })
-        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
+        return self.async_show_form(step_id="connection", data_schema=schema, errors=errors)
 
     async def async_step_controller(self, user_input: dict | None = None) -> FlowResult:
         current = self._current
-        errors = {}
+        errors = {"base": self._controller_error} if self._controller_error else {}
+        self._controller_error = None
         default_host = current.get(CONF_CONTROLLER_HOST) or self._pending.get(CONF_HOST) or current.get(CONF_HOST, "")
         if user_input is not None:
             host = str(user_input[CONF_CONTROLLER_HOST]).strip()
@@ -450,6 +489,7 @@ class PassiveLinkOptionsFlow(config_entries.OptionsFlow):
             if not errors:
                 self._controller_client = client
                 self._pending.update(user_input)
+                self._pending[CONF_CONTROLLER_API_ENABLED] = True
                 return await self.async_step_controller_menu()
 
         schema = vol.Schema({

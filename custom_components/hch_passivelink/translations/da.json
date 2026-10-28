@@ -107,6 +107,15 @@
     "step": {
       "init": {
         "title": "Indstillinger for Dantherm Control",
+        "description": "Vælg hvad du vil ændre.",
+        "menu_options": {
+          "controller_quick": "Controller: drift, Smart Auto-rum, trin og følere",
+          "connection": "Forbindelse til anlægget",
+          "controller": "Controller-API: adresse og nøgle"
+        }
+      },
+      "connection": {
+        "title": "Forbindelse til anlægget",
         "description": "Skift forbindelse, controller og øvrige integrationsindstillinger. Den klassiske lytte-datapath forbliver read-only.",
         "data": {
           "connection_type": "Forbindelsestype",
