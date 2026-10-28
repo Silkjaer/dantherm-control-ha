@@ -107,6 +107,15 @@
     "step": {
       "init": {
         "title": "Dantherm Control settings",
+        "description": "Choose what to change.",
+        "menu_options": {
+          "controller_quick": "Controller: operation, Smart Auto rooms, fan steps and sensors",
+          "connection": "Connection to the unit",
+          "controller": "Controller API address and key"
+        }
+      },
+      "connection": {
+        "title": "Connection to the unit",
         "description": "Change the connection, controller and integration settings. The classic listening data path remains read-only.",
         "data": {
           "connection_type": "Connection type",
