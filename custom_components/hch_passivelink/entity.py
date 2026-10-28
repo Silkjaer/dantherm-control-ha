@@ -77,6 +77,21 @@ HAC1_KEYS = (AFTERHEAT_KEYS - {"afterheat_raw"}) | {
     "air_quality_index",
     "hac1_connected",
 }
+# The controller's afterheat values and controls. They mean something only
+# with a HAC1, so they too wait until one has been seen.
+CONTROLLER_HAC1_KEYS = {
+    "afterheat_setpoint",
+    "actual_afterheat",
+    "actual_afterheat_setpoint",
+    "actual_afterheat_selection",
+    "actual_afterheat_frost_temperature",
+    "actual_afterheat_valve_percent",
+    "actual_afterheat_outdoor_lockout",
+    "afterheat_lift",
+    "afterheat_power_w",
+    "afterheat_energy_today_kwh",
+    "afterheat_energy_kwh",
+}
 # Values that only exist once an HCP4/HRC2 panel has written on the bus. With the
 # Pi as master and no panel, nothing ever produces them, so they are created when
 # the first value arrives instead of sitting unavailable from the start.

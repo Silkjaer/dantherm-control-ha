@@ -71,15 +71,6 @@ class AfterheatClimate(ControllerEntity, ClimateEntity):
             return
         await self.async_command({"afterheat_setpoint": int(round(float(value)))})
 
-    @property
-    def defer_until_data(self) -> bool:
-        """Only a HAC1 has this thermostat: wait until one has been seen."""
-        return not getattr(self.coordinator, "hac1_seen", True)
-
-    @property
-    def has_data(self) -> bool:
-        return getattr(self.coordinator, "hac1_seen", True)
-
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode not in (HVACMode.HEAT, HVACMode.OFF):
             raise ValueError("Unsupported afterheat mode")
