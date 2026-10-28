@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "custom_components"))
 
 pytest.importorskip("homeassistant")
 pytest.importorskip("serial")
-from hch_passivelink import binary_sensor, sensor  # noqa: E402
+from hch_passivelink import binary_sensor, climate, sensor  # noqa: E402
 from hch_passivelink.entity import HAC1_KEYS, HCP4_KEYS, OPTIONAL_CONTROLLER_KEYS  # noqa: E402
 
 PASSIVE_SENSOR_KEYS = {
@@ -195,3 +195,21 @@ def test_hac1_entities_appear_once_a_hac1_is_seen():
     created = keys(sensors) + keys(binaries)
     assert {"co2", "air_quality_index", "hac1_connected"} <= set(created)
     assert len(created) == len(set(created))
+
+
+def test_afterheat_thermostat_waits_for_a_hac1():
+    coordinator = Coordinator(hac1_seen=False)
+    batches, _ = setup_platform(climate, coordinator)
+    assert keys(batches) == []
+
+    coordinator.publish(hac1_connected=False)
+    assert keys(batches) == []
+
+    coordinator.hac1_seen = True
+    coordinator.publish(hac1_connected=True)
+    assert keys(batches) == ["afterheat_setpoint"]
+
+
+def test_afterheat_thermostat_is_created_at_once_with_a_known_hac1():
+    batches, _ = setup_platform(climate, Coordinator())
+    assert keys(batches) == ["afterheat_setpoint"]

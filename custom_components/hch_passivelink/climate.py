@@ -15,7 +15,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .entity import parent_link, sub_model
+from .entity import async_add_entities_when_ready, parent_link, sub_model
 from .controller_entity import ControllerEntity
 
 
@@ -71,6 +71,15 @@ class AfterheatClimate(ControllerEntity, ClimateEntity):
             return
         await self.async_command({"afterheat_setpoint": int(round(float(value)))})
 
+    @property
+    def defer_until_data(self) -> bool:
+        """Only a HAC1 has this thermostat: wait until one has been seen."""
+        return not getattr(self.coordinator, "hac1_seen", True)
+
+    @property
+    def has_data(self) -> bool:
+        return getattr(self.coordinator, "hac1_seen", True)
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         if hvac_mode not in (HVACMode.HEAT, HVACMode.OFF):
             raise ValueError("Unsupported afterheat mode")
@@ -82,4 +91,4 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     if coordinator.controller_client is not None:
-        async_add_entities([AfterheatClimate(coordinator)])
+        async_add_entities_when_ready(entry, coordinator, async_add_entities, [AfterheatClimate(coordinator)])
