@@ -213,6 +213,20 @@ class DanthermDecoder:
                         afterheat_room_setpoint=thermostat_value(values[2]),
                         afterheat_extract_setpoint=thermostat_value(values[3]),
                     )
+                elif 500 <= values[2] <= 4500:
+                    # Without HAC1, HCP4 writes T1..T5 here in hundredths of
+                    # a degree instead (HCH5 MK1, verified 2026-10-28: T1..T4
+                    # matched the unit's own readings within 0.1 °C and T5
+                    # matched the HRC2 display). T3 is extract air, so it can
+                    # never look like a thermostat setpoint. T5 is the HRC2
+                    # room sensor, the only house temperature on such a bus.
+                    room = values[4] / 100.0
+                    hrc2_missing = not 5 <= room <= 40
+                    if not self._snapshot_mode:
+                        self._set(
+                            room_temperature=None if hrc2_missing else room,
+                            room_sensor_missing=hrc2_missing,
+                        )
             return
         if function in (3, 4) and len(frame) == 8:
             return
