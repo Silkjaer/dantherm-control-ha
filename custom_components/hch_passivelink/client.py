@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 
 import serial
@@ -16,12 +17,19 @@ _LOGGER = logging.getLogger(__name__)
 class PassiveLinkClient:
     """Continuously receive a raw RTU-over-TCP stream without ever writing."""
 
+    # Without a CRC-valid frame for this long the stream counts as lost, even
+    # when bytes still arrive (noise, a wrong baud rate on the adapter).
+    NO_TRAFFIC_SECONDS = 15
+
     def __init__(self, host: str, port: int, update: Callable[[dict[str, object]], None]) -> None:
         self.host, self.port, self._update = host, port, update
         self.decoder = DanthermDecoder(update)
-        self.parser = RtuStreamParser(self.decoder.decode)
+        self.parser = RtuStreamParser(self._frame)
         self._stopped = False
+        # True once the current TCP session has delivered a valid frame. An
+        # open socket alone must not make the last session's values current.
         self.connected = False
+        self._frame_at = 0.0
 
     def set_update_callback(
         self, update: Callable[[dict[str, object]], None]
@@ -49,24 +57,42 @@ class PassiveLinkClient:
             writer.close()
             await writer.wait_closed()
 
+    def _frame(self, frame: bytes) -> None:
+        self._frame_at = time.monotonic()
+        # Set before decoding, so the update this frame publishes is current.
+        self.connected = True
+        self.decoder.decode(frame)
+
+    def _no_traffic(self) -> None:
+        self.decoder._frame_times.clear()
+        self.decoder._set(bus_traffic=False, bus_frame_rate=0)
+
     async def run(self) -> None:
         delay = 1
         while not self._stopped:
             writer = None
             try:
                 reader, writer = await asyncio.open_connection(self.host, self.port)
-                self.connected, delay = True, 1
-                self._update(dict(self.decoder.data))
+                delay = 1
+                # A new session starts clean: no bytes of a frame cut off by
+                # the drop, no request still waiting for its answer.
+                self.parser = RtuStreamParser(self._frame)
+                self.decoder.reset_session()
+                self._frame_at = time.monotonic()
                 while not self._stopped:
                     try:
-                        chunk = await asyncio.wait_for(reader.read(4096), timeout=15)
+                        chunk = await asyncio.wait_for(
+                            reader.read(4096), timeout=self.NO_TRAFFIC_SECONDS
+                        )
                     except asyncio.TimeoutError as err:
-                        self.decoder._frame_times.clear()
-                        self.decoder._set(bus_traffic=False, bus_frame_rate=0)
+                        self._no_traffic()
                         raise ConnectionError("No RS485 traffic for 15 seconds") from err
                     if not chunk:
                         raise ConnectionError("TCP stream closed")
                     self.parser.feed(chunk)
+                    if time.monotonic() - self._frame_at > self.NO_TRAFFIC_SECONDS:
+                        self._no_traffic()
+                        raise ConnectionError("No valid RS485 frame for 15 seconds")
             except (OSError, ConnectionError) as err:
                 self.connected = False
                 self._update(dict(self.decoder.data))

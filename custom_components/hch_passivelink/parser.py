@@ -129,6 +129,24 @@ class DanthermDecoder:
         if changed:
             self._on_update(dict(self.data))
 
+    def reset_session(self) -> None:
+        """Forget half-seen requests and command sequences after a reconnect.
+
+        Frames sent while the stream was down were missed, so a request seen
+        before the drop must not be paired with an answer seen after it.
+        """
+        self._snapshot_request_at = None
+        self._last_explicit_command = float("-inf")
+        self._last_explicit_command_value = None
+        self._night_transition_until = 0.0
+        self._night_transition_registers.clear()
+        self._filter_command_until = 0.0
+        self._pending_auto_until = 0.0
+        self._pending_manual3_until = 0.0
+        self._pending_manual_until = 0.0
+        self._pending_mode_start_pair = None
+        self._frame_times.clear()
+
     @staticmethod
     def _room_relative_humidity(
         measured_rh: float, sensor_temperature: float, room_temperature: float
