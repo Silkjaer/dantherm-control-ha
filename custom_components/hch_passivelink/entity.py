@@ -104,6 +104,8 @@ HCP4_KEYS = {
     "current_level",
     "fireplace",
     "standby",
+    # Register 143, the panel's control commands.
+    "command_raw",
 }
 # Pi values that are reported only in some installations.
 OPTIONAL_CONTROLLER_KEYS = {
