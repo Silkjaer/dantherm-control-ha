@@ -53,3 +53,13 @@ def test_setpoint_is_not_filtered():
     coordinator = SimpleNamespace(controller_state={"actual_afterheat_setpoint": 22}, controller_client=None)
     sensor = ControllerStatusSensor(coordinator, "actual_afterheat_setpoint", "SP", UnitOfTemperature.CELSIUS, "mdi:x")
     assert sensor.native_value == 22 and sensor.state_class is None
+
+
+def test_the_room_temperature_source_is_named_for_people():
+    coordinator = SimpleNamespace(controller_state={}, controller_client=None)
+    sensor = ControllerStatusSensor.__new__(ControllerStatusSensor)
+    ControllerStatusSensor.__init__(sensor, coordinator, "afterheat_room_source_used", "Kilde", None, "mdi:x")
+    for raw, shown in (("t3", "Udsugningsluft (T3)"), ("ha_average", "Gennemsnit af HA-rum"),
+                       ("room:Stue", "Stue"), (None, None)):
+        coordinator.controller_state = {"afterheat_room_source_used": raw}
+        assert sensor.native_value == shown

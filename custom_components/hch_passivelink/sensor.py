@@ -148,6 +148,9 @@ CONTROLLER_SENSOR_SPECS = (
     ("actual_bypass_request", "Bypass aktuelt ønske", None, "mdi:valve"),
     ("actual_afterheat_outdoor_lockout", "Eftervarme sommerstop", None, "mdi:weather-sunny-alert"),
     ("cooling_state", "Frikølingstilstand", None, "mdi:snowflake"),
+    # The room temperature free cooling and the afterheat steer by, and where it comes from.
+    ("afterheat_room_temperature", "Styrende rumtemperatur", UnitOfTemperature.CELSIUS, "mdi:home-thermometer"),
+    ("afterheat_room_source_used", "Kilde til styrende rumtemperatur", None, "mdi:home-search-outline"),
     ("quick_boost_remaining_seconds", "Hurtig boost tilbage", UnitOfTime.SECONDS, "mdi:fan-clock"),
     ("cool_boost_remaining_seconds", "Køl tid tilbage", UnitOfTime.SECONDS, "mdi:snowflake-alert"),
     ("bonfire_remaining_seconds", "Bål tid tilbage", UnitOfTime.SECONDS, "mdi:campfire"),
@@ -275,6 +278,12 @@ MEASUREMENT_UNITS = {
 }
 # Setpoints change in steps on purpose and are not filtered or averaged.
 SETPOINT_KEYS = {"actual_afterheat_setpoint"}
+# The controller's room temperature sources; a single HA room comes as "room:<name>".
+ROOM_SOURCE_LABELS = {
+    "ha_average": "Gennemsnit af HA-rum",
+    "t3": "Udsugningsluft (T3)",
+    "t5": "HRC2-rumføler (T5)",
+}
 # A single sample this far from its neighbours is a bus glitch, not air.
 SPIKE_LIMIT_C = 1.0
 
@@ -302,6 +311,8 @@ class ControllerStatusSensor(ControllerEntity, SensorEntity):
             # The Pi has no end time while the unit is on; that is zero seconds left.
             state = self.coordinator.controller_state
             return 0 if "standby_active" in state and not state["standby_active"] else None
+        if self.key == "afterheat_room_source_used" and isinstance(value, str):
+            return ROOM_SOURCE_LABELS.get(value, value.removeprefix("room:"))
         if not self._temperature or not isinstance(value, (int, float)):
             return value
         # Each controller poll replaces controller_state with a new dict; filter a
