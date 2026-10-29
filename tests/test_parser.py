@@ -194,6 +194,38 @@ def test_hcp4_temperature_block_without_hrc2_is_not_a_room_temperature():
     assert derive_alarm_values(decoder.data)["room_temperature_sensor_fault"] is False
 
 
+def test_hcp4_room_temperature_expires_when_no_longer_written():
+    from unittest.mock import patch
+
+    decoder = DanthermDecoder(lambda _: None)
+    block = frame(bytes.fromhex("401000b400050a050505690ab70a070a64"))
+    fan_write = frame(bytes.fromhex("010600420019"))
+    with patch("parser.time.monotonic", return_value=100):
+        decoder.decode(block)
+    # HCP4/HRC2 went quiet while the unit's own traffic goes on.
+    with patch("parser.time.monotonic", return_value=399):
+        decoder.decode(fan_write)
+    assert decoder.data["room_temperature"] == 26.6
+    with patch("parser.time.monotonic", return_value=401):
+        decoder.decode(fan_write)
+    assert decoder.data["room_temperature"] is None
+    with patch("parser.time.monotonic", return_value=402):
+        decoder.decode(block)
+    assert decoder.data["room_temperature"] == 26.6
+
+
+def test_register_184_room_temperature_expires_too():
+    from unittest.mock import patch
+
+    decoder = DanthermDecoder(lambda _: None)
+    with patch("parser.time.monotonic", return_value=100):
+        decoder.decode(frame(bytes.fromhex("4003020bb8")))
+    assert decoder.data["room_temperature"] == 30.0
+    with patch("parser.time.monotonic", return_value=401):
+        decoder.decode(frame(bytes.fromhex("010600420019")))
+    assert decoder.data["room_temperature"] is None
+
+
 def test_supply_air_setpoint_from_hac1_write_block():
     decoder = DanthermDecoder(lambda _: None)
     body = bytes.fromhex("401000b900050aff011600000f18fee201")
