@@ -152,6 +152,15 @@ class DanthermDecoder:
             bus_frame_rate=len(self._frame_times),
         )
         slave, function = frame[0], frame[1]
+        if slave == 0x40 and (
+            function in (3, 4) and len(frame) != 8 and len(frame) == 5 + frame[2]
+            or function == 16 and len(frame) == 8
+        ):
+            # A read response or a write acknowledgement from 0x40 can only
+            # come from a HAC1. HCP4 also writes to 0x40 on units without one,
+            # so its requests prove nothing; an answer does, whatever the CO2
+            # sensor reads.
+            self._set(hac1_connected=True)
         if slave == 0x40 and function == 3 and len(frame) == 8:
             self._snapshot_request_at = (
                 now if frame[2:6] == bytes.fromhex("00b4001e") else None
@@ -256,7 +265,7 @@ class DanthermDecoder:
         if slave == 0x40 and function == 3 and len(frame) == 15 and frame[2] == 10:
             values = [int.from_bytes(frame[i:i + 2], "big") for i in range(3, 13, 2)]
             if values[:3] == [0x3000, 0x1100, 0] and 300 <= values[3] <= 10000:
-                self._set(co2=values[3], hac1_connected=True)
+                self._set(co2=values[3])
             elif values[0] & 0xFF == 1 and values[2] == 15 and values[1] % 256 == 0 \
                     and 5 <= values[1] // 256 <= 40:
                 self._set(afterheat_setpoint=values[1] // 256)

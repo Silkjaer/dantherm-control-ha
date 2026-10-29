@@ -241,3 +241,25 @@ def test_missing_hrc2_t5_is_not_a_room_temperature():
     words[4] = 0x7FFF
     decoder.decode(frame(bytes([0x40, 3, 60]) + b"".join(w.to_bytes(2, "big") for w in words)))
     assert derive_alarm_values(decoder.data)["room_temperature_sensor_fault"] is True
+
+
+def test_hac1_answer_is_seen_even_without_a_co2_value():
+    # Pi as master, no HCP4: a HAC1 whose CO2 sensor reads 0 still answers.
+    decoder = DanthermDecoder(lambda _: None)
+    decoder.decode(frame(bytes.fromhex("400300c80005")))
+    assert "hac1_connected" not in decoder.data
+    decoder.decode(frame(bytes.fromhex("40030a30001100000000000000")))
+    assert decoder.data["hac1_connected"] is True
+    assert "co2" not in decoder.data
+
+
+def test_writes_to_0x40_without_an_answer_are_no_hac1():
+    # HCP4 writes T1..T5 to 0x40 on a unit without HAC1; nothing answers.
+    decoder = DanthermDecoder(lambda _: None)
+    decoder.decode(frame(bytes.fromhex("401000b400050a05140834089805dc0866")))
+    decoder.decode(frame(bytes.fromhex("400600b90001")))
+    decoder.decode(frame(bytes.fromhex("400300b4001e")))
+    assert "hac1_connected" not in decoder.data
+    # The HAC1's acknowledgement of such a write does show it is there.
+    decoder.decode(frame(bytes.fromhex("401000b40005")))
+    assert decoder.data["hac1_connected"] is True
