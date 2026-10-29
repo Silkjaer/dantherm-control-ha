@@ -17,6 +17,9 @@ LEVEL_TARGETS = {
     "off": (0, 0), "level_1": (25, 13), "level_2": (55, 43),
     "level_3": (85, 73), "boost": (100, 88),
 }
+# T5 outside the HAC1 snapshot is renewed every few seconds by HCP4 (or every
+# 15 s by a gateway reading register 184). One older than this is stale.
+ROOM_TEMPERATURE_MAX_AGE = 300
 
 
 def temperature_value(raw: int) -> float | None:
@@ -115,6 +118,7 @@ class DanthermDecoder:
         self._snapshot_mode = False
         self._snapshot_at = 0.0
         self._snapshot_request_at: float | None = None
+        self._room_temperature_at: float | None = None
 
     def _set(self, **values: object) -> None:
         changed = False
@@ -143,6 +147,13 @@ class DanthermDecoder:
         if self._snapshot_mode and now - self._snapshot_at > 30:
             self._set(**dict.fromkeys(TEMPERATURE_KEYS), temperature_sample_monotonic=now)
             self._snapshot_at = now
+        if self._room_temperature_at is not None \
+                and now - self._room_temperature_at > ROOM_TEMPERATURE_MAX_AGE:
+            # The unit's own frames keep coming when HCP4/HRC2 goes quiet, so
+            # without this the last T5 would stay a valid room temperature.
+            self._room_temperature_at = None
+            if not self._snapshot_mode:
+                self._set(room_temperature=None)
         self._frame_times.append(now)
         while self._frame_times and now - self._frame_times[0] > 60:
             self._frame_times.popleft()
@@ -232,6 +243,7 @@ class DanthermDecoder:
                     room = values[4] / 100.0
                     hrc2_missing = not 5 <= room <= 40
                     if not self._snapshot_mode:
+                        self._room_temperature_at = now
                         self._set(
                             room_temperature=None if hrc2_missing else room,
                             room_sensor_missing=hrc2_missing,
@@ -260,6 +272,7 @@ class DanthermDecoder:
             # hvert 15. sekund og genudsender svaret på den rå TCP-strøm.
             raw = int.from_bytes(frame[3:5], "big")
             if not self._snapshot_mode and 500 <= raw <= 4000:
+                self._room_temperature_at = now
                 self._set(room_temperature=raw / 100.0)
             return
         if slave == 0x40 and function == 3 and len(frame) == 15 and frame[2] == 10:
