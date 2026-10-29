@@ -284,6 +284,7 @@ class SmartPassiveLinkCoordinator(PassiveLinkCoordinator):
         if self.controller_client is None:
             return
         self.controller_client._update = self.async_handle_controller_update
+        self.controller_client._on_disconnect = self.async_update_listeners
         self.controller_task = self.hass.async_create_background_task(
             self.controller_client.run(), "Dantherm HCH Pi controller API"
         )
