@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .controller_entity import ControllerEntity
+from .entity import async_add_entities_when_ready
 
 
 @dataclass(frozen=True)
@@ -132,10 +133,19 @@ class FanProfileNumber(ControllerEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        # With four steps, levels 5 and 6 do not exist; steps 1-2 follow the offset.
         client = getattr(self.coordinator, "controller_client", None)
+        return bool(client and client.connected and self.has_data)
+
+    @property
+    def defer_until_data(self) -> bool:
+        # With four steps, levels 5 and 6 do not exist; steps 1-2 follow the
+        # offset. A level is created once the Pi reports a profile for it.
+        return True
+
+    @property
+    def has_data(self) -> bool:
         profiles = self.coordinator.controller_state.get("profiles") or {}
-        return bool(client and client.connected and (str(self.level) in profiles or self.level in profiles))
+        return str(self.level) in profiles or self.level in profiles
 
     @property
     def native_value(self) -> float | None:
@@ -163,4 +173,4 @@ async def async_setup_entry(
         for kind in ("extract", "supply")
     )
     entities.extend(FanSettingNumber(coordinator, *spec) for spec in FAN_SETTINGS)
-    async_add_entities(entities)
+    async_add_entities_when_ready(entry, coordinator, async_add_entities, entities)

@@ -145,6 +145,31 @@ def test_listener_is_removed_on_unload_and_stops_adding():
     assert "extract_fan_percent" not in keys(batches)
 
 
+def test_panel_command_waits_for_a_command_when_pi_is_master():
+    coordinator = Coordinator()
+    coordinator.client = None  # an MK1 bus client
+    batches, _ = setup_platform(sensor, coordinator)
+    assert "command_raw" not in keys(batches)
+    coordinator.publish(command_raw=172)
+    assert "command_raw" in keys(batches)
+
+
+def test_fan_levels_the_pi_has_no_profile_for_are_not_created():
+    from hch_passivelink import number
+
+    coordinator = Coordinator()
+    batches, _ = setup_platform(number, coordinator)
+    assert not [key for key in keys(batches) if key.startswith("level_")]
+    assert "rh_setpoint" in keys(batches)
+
+    # Four Dantherm steps: the Pi reports profiles for levels 1-4 only.
+    coordinator.publish_controller(profiles={str(level): {"extract": 50, "supply": 40} for level in range(1, 5)})
+    created = keys(batches)
+    assert {f"level_{level}_{kind}" for level in range(1, 5) for kind in ("extract", "supply")} <= set(created)
+    assert not {"level_5_extract", "level_5_supply", "level_6_extract", "level_6_supply"} & set(created)
+    assert len(created) == len(set(created))
+
+
 def standby_sensor(state):
     coordinator = Coordinator()
     coordinator.controller_state = state
