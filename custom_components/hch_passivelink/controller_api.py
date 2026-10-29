@@ -33,6 +33,9 @@ class ControllerApiClient:
         self.connected = False
         self._stopped = False
         self.last_error: str | None = None
+        # Called when polling loses the controller, so its entities can turn
+        # unavailable at once instead of with the next unrelated update.
+        self._on_disconnect: Callable[[], None] | None = None
 
     @property
     def headers(self) -> dict[str, str]:
@@ -42,19 +45,28 @@ class ControllerApiClient:
         }
 
     async def _json(self, method: str, path: str, payload: dict | None = None) -> dict[str, object]:
-        async with self.session.request(
-            method,
-            f"{self.base_url}{path}",
-            headers=self.headers,
-            json=payload,
-            timeout=10,
-        ) as response:
-            body = await response.json(content_type=None)
-            if response.status >= 400:
-                raise ConnectionError(body.get("error") or f"Controller HTTP {response.status}")
-            if not isinstance(body, dict):
-                raise ConnectionError("Controller returned invalid JSON")
-            return body
+        # Every failure, including an HTML error page from a proxy, ends up as
+        # ConnectionError, so callers and the poll loop handle one kind.
+        try:
+            async with self.session.request(
+                method,
+                f"{self.base_url}{path}",
+                headers=self.headers,
+                json=payload,
+                timeout=10,
+            ) as response:
+                try:
+                    body = await response.json(content_type=None)
+                except ValueError:
+                    body = None
+                if response.status >= 400:
+                    error = body.get("error") if isinstance(body, dict) else None
+                    raise ConnectionError(error or f"Controller HTTP {response.status}")
+                if not isinstance(body, dict):
+                    raise ConnectionError("Controller returned invalid JSON")
+                return body
+        except ClientError as error:
+            raise ConnectionError(f"Controller request failed: {error}") from error
 
     async def async_get_state(self) -> dict[str, object]:
         state = await self._json("GET", "/api/controller/state")
@@ -106,9 +118,11 @@ class ControllerApiClient:
                 delay = 1.0
                 await asyncio.sleep(self.poll_seconds)
             except (OSError, ClientError, ConnectionError, asyncio.TimeoutError) as error:
-                self.connected = False
+                was_connected, self.connected = self.connected, False
                 self.last_error = str(error)
                 _LOGGER.debug("Controller API reconnect: %s", error)
+                if was_connected and self._on_disconnect is not None:
+                    self._on_disconnect()
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 30.0)
 
