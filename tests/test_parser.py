@@ -37,7 +37,13 @@ def test_humidity_uses_input_register_4_byte_scaling():
     decoder.decode(frame(bytes.fromhex("0104080831084909240869")))
     decoder.decode(frame(bytes.fromhex("01040a008d0a24090c00400002")))
     assert decoder.data["measured_relative_humidity"] == 55.3
-    assert decoder.data["relative_humidity"] == 49.4
+    assert decoder.data["relative_humidity"] == 55.3
+
+
+def test_humidity_does_not_wait_for_temperatures():
+    decoder = DanthermDecoder(lambda _: None)
+    decoder.decode(frame(bytes.fromhex("01040a008d0a24090c00400002")))
+    assert decoder.data["relative_humidity"] == 55.3
 
 
 def test_disconnected_humidity_sensor_is_unavailable():

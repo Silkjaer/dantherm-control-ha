@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import time
 from collections import deque
 from collections.abc import Callable
@@ -146,19 +145,6 @@ class DanthermDecoder:
         self._pending_manual_until = 0.0
         self._pending_mode_start_pair = None
         self._frame_times.clear()
-
-    @staticmethod
-    def _room_relative_humidity(
-        measured_rh: float, sensor_temperature: float, room_temperature: float
-    ) -> float:
-        """Compensate sensor RH to the extract/room-air temperature."""
-        def saturation_pressure(temperature: float) -> float:
-            return 6.112 * math.exp(
-                17.62 * temperature / (243.12 + temperature)
-            )
-
-        return measured_rh * saturation_pressure(sensor_temperature) \
-            / saturation_pressure(room_temperature)
 
     def decode(self, frame: bytes) -> None:
         now = time.monotonic()
@@ -341,21 +327,12 @@ class DanthermDecoder:
             elif len(values) == 5:
                 raw, extract_rpm, supply_rpm, bypass_raw, status_code = values
                 measured_rh = round(raw * 100 / 255, 1) if 0 < raw <= 255 else None
-                extract_temperature = self.data.get("extract_temperature")
-                exhaust_temperature = self.data.get("exhaust_temperature")
-                calculated_rh = None
-                if measured_rh is not None \
-                        and isinstance(extract_temperature, (int, float)) \
-                        and isinstance(exhaust_temperature, (int, float)):
-                    calculated_rh = round(self._room_relative_humidity(
-                        measured_rh, exhaust_temperature, extract_temperature
-                    ), 1)
                 self._set(
-                    # Danfoss keeps the RH measured at the sensor's local
-                    # temperature and displays the room-equivalent RH after
-                    # compensating it to the extract-air temperature.
+                    # The sensor sits in the extract air, so its reading is
+                    # the room-side RH. Rescaling it from T4 to T3 put the
+                    # indoor dew point below the outdoor one.
                     measured_relative_humidity=measured_rh,
-                    relative_humidity=calculated_rh,
+                    relative_humidity=measured_rh,
                     heat_recovery_raw=raw, extract_fan_rpm=extract_rpm,
                     supply_fan_rpm=supply_rpm, bypass_raw=bypass_raw,
                     bypass_active=bypass_raw == 255, status_code=status_code,
