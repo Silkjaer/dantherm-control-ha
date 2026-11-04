@@ -2,6 +2,7 @@
 import ast
 import asyncio
 from pathlib import Path
+import time
 import unittest
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -148,6 +149,26 @@ class CoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(c.data["preheater_water_delta"], 2.)
         self.assertEqual(c.data["co2"], 900)
         self.assertEqual(c.data["supply_extract_delta"], 1.)
+
+    async def test_unit_filter_counter_takes_over_from_local_reset(self):
+        cls = coordinator_class()
+        c = object.__new__(cls)
+        c.hass = SimpleNamespace(async_create_task=lambda coro: coro.close())
+        c.unit_filter_counter = False
+        c._filter_reset_epoch = c._filter_interval_days = None
+        c._filter_notification_reset_epoch = None
+        c._filter_reset_history = []
+        c._sync_unit_filter({"filter_unit_hours": None, "filter_unit_period_months": 12})
+        self.assertFalse(c.unit_filter_counter)
+        c._sync_unit_filter({"filter_unit_hours": 4398, "filter_unit_period_months": 12})
+        self.assertTrue(c.unit_filter_counter)
+        unit_reset = c._filter_reset_epoch
+        # A local reset is undone by the next frame from the unit; only the
+        # false history entry would remain, hence the disabled button.
+        c._filter_reset_epoch = time.time()
+        c._sync_unit_filter({"filter_unit_hours": 4398, "filter_unit_period_months": 12})
+        self.assertAlmostEqual(c._filter_reset_epoch, unit_reset, delta=5)
+        self.assertEqual(len(c._filter_reset_history), 1)
 
     async def test_failed_water_fetch_publishes_air_and_clears_old_water(self):
         cls = coordinator_class()

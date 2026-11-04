@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: MRDonnii/ha-room-energy-optimizer/.github/workflows/ha-integration-ci.yml@main
+    with:
+      # pyserial ships with Home Assistant, so it is not in the manifest
+      extra-packages: pyserial
+      # The plain tests use asyncio.run(), which leaves no event loop for the
+      # Home Assistant pytest plugin, so the plugin tests run in their own call.
+      test-command: >-
+        python -m pytest -q -p no:cacheprovider -p no:homeassistant --ignore=tests/test_mk2_ha.py &&
+        python -m pytest -q -p no:cacheprovider -o asyncio_mode=auto tests/test_mk2_ha.py
+
+  gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Check gateway scripts
+        run: |
+          bash -n gateway/install.sh
+          python -m compileall -q gateway custom_components/hch_passivelink

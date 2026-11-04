@@ -176,7 +176,7 @@ Enabling that same extension also creates a separate **Raspberry Pi** device —
 
 Valid heat-recovery measurements are classified as good (85% or higher), acceptable (70–84.9%) or low. The integration learns a slowly changing local reference and reports the drop as normal, watch (7.5 percentage points) or degraded (12.5 percentage points). Bypass and invalid temperature spans are excluded. Fan-control and RPM deltas are change indicators, not calibrated airflow measurements.
 
-A "Reset filter interval" button lets you mark the filter as changed from Home Assistant — it only resets the locally tracked cycle and never writes to the bus. If the gateway connection or the HAC1 module stays unreachable for more than 15 minutes, the integration raises a Home Assistant Repairs issue and clears it automatically once the link recovers.
+A "Reset filter interval" button lets you mark the filter as changed from Home Assistant — it only resets the locally tracked cycle and never writes to the bus. When the unit's own filter counter is on the bus, the integration follows that counter and the button is unavailable: reset the counter with the button on the unit, and the change is recorded from there. If the gateway connection or the HAC1 module stays unreachable for more than 15 minutes, the integration raises a Home Assistant Repairs issue and clears it automatically once the link recovers.
 
 Up to the latest 20 locally confirmed filter changes are retained. The last change and number of recorded changes are available as diagnostic sensors.
 

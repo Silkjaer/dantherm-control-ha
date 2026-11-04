@@ -30,7 +30,10 @@ class PassiveLinkFilterResetButton(PassiveLinkEntity, ButtonEntity):
 
     @property
     def available(self) -> bool:
-        return self.coordinator.available
+        # With the unit's counter on the bus its next frame puts the cycle
+        # back, so a press would only log a filter change that never
+        # happened. The button on the unit resets that counter instead.
+        return self.coordinator.available and not self.coordinator.unit_filter_counter
 
     async def async_press(self) -> None:
         self.coordinator.async_reset_filter()
