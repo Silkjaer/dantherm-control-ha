@@ -58,6 +58,29 @@ class SmartPassiveLinkCoordinator(PassiveLinkCoordinator):
             return int(offset)
         return 0
 
+    def _alarm_inputs(self, data: dict[str, object]) -> dict[str, object]:
+        """Add the fan commands from the Pi when the bus does not carry them.
+
+        The fan alarms compare the commanded percent with the rpm. The bus
+        shows the command only in HCP4's writes, so with the Pi as master the
+        alarms never saw one and stayed off while both fans stood still.
+        """
+        client = self.controller_client
+        if client is None or not client.connected:
+            return data
+        inputs = dict(data)
+        for key, field in (
+            ("extract_fan_percent", "actual_fan_extract_percent"),
+            ("supply_fan_percent", "actual_fan_supply_percent"),
+        ):
+            value = self.controller_state.get(field)
+            if (
+                not isinstance(inputs.get(key), (int, float))
+                and isinstance(value, (int, float)) and not isinstance(value, bool)
+            ):
+                inputs[key] = value
+        return inputs
+
     @callback
     def async_handle_controller_update(self, state: dict[str, object]) -> None:
         self.controller_state = dict(state)

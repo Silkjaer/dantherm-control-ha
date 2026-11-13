@@ -221,7 +221,11 @@ class PassiveLinkCoordinator(DataUpdateCoordinator[dict[str, object]]):
         supply_rpm = data.get("supply_fan_rpm")
         if isinstance(extract_rpm, (int, float)) and isinstance(supply_rpm, (int, float)):
             data["fan_rpm_delta"] = round(supply_rpm - extract_rpm)
-        data.update(derive_alarm_values(data))
+        data.update(derive_alarm_values(self._alarm_inputs(data)))
+
+    def _alarm_inputs(self, data: dict[str, object]) -> dict[str, object]:
+        """The values the alarms are derived from: the bus traffic alone here."""
+        return data
 
     def _update_filter_history_values(self, data: dict[str, object]) -> None:
         if not self._filter_reset_history:
